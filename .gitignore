@@ -1,0 +1,10 @@
+# Private backups and local work must not be published.
+*.zip
+*-simple-narou-backup-*.json
+*-simple-narou-backup-*.txt
+work/
+test-data/
+node_modules/
+__pycache__/
+.DS_Store
+Thumbs.db

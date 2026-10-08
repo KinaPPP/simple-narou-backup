@@ -1,0 +1,20 @@
+import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFile} from 'node:fs/promises';
+import {allowedUrl,backupEntryUrl,findSite} from '../core.mjs';
+import {normalizePreference,preferenceKey} from '../preferences.mjs';
+const code=await readFile(new URL('../detail.js',import.meta.url),'utf8');
+test('編集・公式設定は同じアカウントの管理画面で使え、一括取得の入口制限は維持する',async()=>{
+ const sourceContext={tabId:7,ownerId:'123',siteId:'narou'};let url='https://syosetu.com/usernoveldatamanage/updateinput/ncode/1/noveldataid/1/',owner='123';
+ const nodes={status:{},formatCommon:{checked:false}},stored={};
+ const doc={getElementById:id=>nodes[id],querySelectorAll:()=>[],querySelector:s=>s.includes('select')?{value:'utf-16le'}:s.includes('return_code')?{value:'lf'}:s.includes('bom')?{checked:true}:null};
+ const ctx=vm.createContext({findSite,allowedUrl,backupEntryUrl,normalizePreference,preferenceKey,URL,Date,document:doc,location:{pathname:'/backup/top/ncode/1/'},NarouParser:{ownerId:()=>owner},chrome:{storage:{session:{get:async()=>({sourceContext})},local:{set:async v=>Object.assign(stored,v)}},tabs:{get:async()=>({id:7,url})},scripting:{executeScript:async args=>args.files?[]:[{result:args.func()}]}}});
+ vm.runInContext(await readFile(new URL('../sites/narou/runtime.js',import.meta.url),'utf8'),ctx);
+ vm.runInContext(code.slice(code.indexOf('async function sourceTab('),code.indexOf('async function showContext()')),ctx);
+ assert.equal((await ctx.sourceTab(false)).id,7);await assert.rejects(ctx.sourceTab(),/別サイト/);
+ assert.equal(findSite(url).editPathPattern.test(new URL(url).pathname),true);
+ url='https://syosetu.com/backup/top/ncode/1/';assert.equal((await ctx.sourceTab(false)).id,7);await assert.rejects(ctx.sourceTab(),/別サイト/);
+ vm.runInContext("const $=id=>document.getElementById(id);function error(e){nodesError=e.message;}",ctx);
+ nodes.rememberFormat={};vm.runInContext(code.slice(code.indexOf("$('rememberFormat').onclick"),code.indexOf('async function bulk(')),ctx);
+ await nodes.rememberFormat.onclick();assert.equal(Object.values(stored).length,1);assert.equal(Object.values(stored)[0].settings.encoding,'utf-16le');assert.match(nodes.status.textContent,/記録しました/);
+ owner='456';await assert.rejects(ctx.sourceTab(false),/アカウント/);owner='123';url='https://example.com/';await assert.rejects(ctx.sourceTab(false),/別サイト/);
+ url='https://syosetu.com/user/top/';assert.equal((await ctx.sourceTab()).id,7);assert.equal(findSite(url).editPathPattern.test(new URL(url).pathname),false);
+});

@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>保存した原稿</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="organized.css"></head>
+<body><main class="library"><p class="eyebrow">シンプルになろう（バックアップ）</p><h1>保存した原稿</h1>
+<p>保存履歴はこのChromeの中にあります。ファイルを書き出して、手元にも残してください。</p>
+<div class="toolbar"><button id="json">全履歴をJSONで保存</button><button id="txt">全履歴をテキストで保存</button><button id="refresh" class="secondary">一覧を更新</button><button id="settings" class="secondary">ダウンロード設定の控え</button></div>
+<p id="status" role="status" aria-live="polite"></p>
+<p class="note">JSONには全履歴・保存日時・編集画面のURL・入力欄の名前と内容が入ります。テキストはメモ帳で読めます。原稿は外部に送信しません。拡張機能を削除すると端末内の履歴も消えます。</p>
+<div id="records"></div></main><script type="module" src="library.js"></script></body></html>
+
+

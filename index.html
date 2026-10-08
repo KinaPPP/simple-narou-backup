@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'">
+<title>シンプルになろう（バックアップ）｜確認画面</title><link rel="stylesheet" href="viewer.css"><link rel="stylesheet" href="organized.css"></head>
+<body><header><p>ローカルの控え</p><h1>シンプルになろう（バックアップ）｜確認画面</h1><span id="fileName">ファイルは端末内で読み取ります</span></header>
+<main><section id="drop"><h2>保存したJSONをここにドロップ</h2><p>またはファイルを選んでください。原稿を送信する機能はありません。</p><label class="choose">ファイルを選ぶ<input id="file" type="file" accept=".json,application/json"></label></section>
+<p id="message" role="status" aria-live="polite">確認と手動コピー用です。なろうへの書き戻しは行いません。</p>
+<section id="app" hidden><button id="export">関連付けを含めてJSONを保存</button><p class="meta">ここで変更した関連作品は、JSONを書き出して残してください。</p><div id="organized"></div></section></main>
+<script src="sites/narou/organized.js"></script><script src="viewer.js"></script></body></html>
+
+

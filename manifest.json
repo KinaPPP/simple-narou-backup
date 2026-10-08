@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "シンプルになろう（バックアップ）",
+  "version": "1.0.0",
+  "minimum_chrome_version": "109",
+  "description": "サイト別ユニットで自作小説を取得するバックアップ拡張機能（現在は小説家になろうのみ）。",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "シンプルになろう（バックアップ）",
+    "default_icon": {
+      "16": "icons/narou-16.png",
+      "32": "icons/narou-32.png",
+      "48": "icons/narou-48.png",
+      "128": "icons/narou-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/narou-16.png",
+    "32": "icons/narou-32.png",
+    "48": "icons/narou-48.png",
+    "128": "icons/narou-128.png"
+  }
+}

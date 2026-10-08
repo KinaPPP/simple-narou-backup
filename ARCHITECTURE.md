@@ -1,0 +1,41 @@
+# v0.6.3 の構成
+
+サイト固有処理はsites/narou、登録はsites/registry.mjsへ分離。契約はCONTRIBUTING参照。カクヨム等は未登録です。
+
+## 保存経路
+
+save-directory.mjsはフォルダハンドルをIndexedDBへ保存し、取得前に書き込み権限を確認。ファイル名はIDと日本日時。同名を検出したら別名にし、既存ファイルを上書きしません。取得元のURLとIDは作成前と開始時に検証します。
+
+zip.mjsはSTORE ZIP64。原稿JSON/TXT→manifest→中央ディレクトリ→終端を書きclose後のみ成功。次回commitは前回manifest位置から更新し、旧manifestの累積を防止。原稿の異なる版には異なるIDを使い、同名原稿の置換はしません。createWritableのステージングとabortで前の確定分を残します。全原稿Blobは作らず索引をRAMへ保持します。
+
+archive.mjsは原稿・索引・完了判定、archive-set.mjsは連番ZIPと統合閲覧。全体索引はRAM、各ZIPには自身の原稿索引のみ。予測サイズと余裕でZIPを切り替えます。1原稿・取得結果・管理情報だけで上限を超える場合は分断しません。
+
+manifest.archiveSetは{id,index,total,sealed,targetBytes}。indexは1始まり、totalは取得中nullで最終確定時に全ファイルへ記録。sealedは後続ZIPの存在を示します。checkpointは現在のZIPへ保存。切り替え直後にcheckpointが未保存なら、統合読込では最後に存在するcheckpointを使います。
+
+全体索引のcompletionIssues検証後に各ZIPへ総数・完了を確定。途中で中断したら全ファイルの完了が揃わず未完了になります。末尾ZIPがtotal未確定かつsealedなら後続不足と判定します。
+
+backgroundは取得元tab・サイト・アカウントと詳細tabを結び付けます。collectorのsaveSnapshot→詳細のarchiveWrite→close→応答の順。checkpointもディスク応答後にChromeへ記録。詳細消失や保存失敗は成功にせず、Chrome履歴へ黙って切り替えません。再開は元ZIPを保持し、新セットIDでコピーした後にcheckpointを復元します。
+
+## 読み込み
+
+openArchivesは同セット・所有者・サイトを確認し、番号を並べ直して重複・総数矛盾を拒否。missingPartsがあってもある原稿は読めますが再開不可。completeには全ファイルの完了・総数・欠落なし・checkpointと索引の整合が必要です。
+
+manifestと中央索引を先に読み、選んだ作品のJSONだけCRC・ID・所有者・サイトを検証。完了表示は全原稿のCRCを先読みした結果ではありません。HTML・挿絵コードは文字として表示し、外部メディアやスクリプトを実行しません。詳細ページはZIP/JSON、従来の単体index.htmlはJSON用です。
+
+## リセット
+
+resetDataは現在の詳細tabのみ。取得中・休憩中・生きているZIP経路があれば拒否。編集履歴を停止し終了collectorの状態を解除。受付済みの書き込みジョブを待ち、新規保存を拒否してsnapshot・checkpoint・関連付けを削除。保存先・ダウンロード設定・公式設定の控え・外部ファイルは維持し、画面のファイル参照と原稿表示を解除します。
+
+Chrome履歴の10MB制限は継続。大容量は直接ZIP。フォルダはIndexedDB、取得元・中断印はsession、操作設定はlocal。パスワード・Cookie・認証情報を取得する権限は追加していません。
+
+
+## v1.0.0の保存系統と合成表示
+
+新しい保存操作はArchiveSetのseparateOtherを有効にします。作品／その他の各書き込み先を保持し、その他5カテゴリは000へ振り分けます。各系統でサイズを予測し、原稿単位で次のZIPへ移ります。archiveSet.indexはファイル名と別の全体通番（1始まり）です。最終commit時に全体のpartLabelsを全ZIPへ記録し、通番を実際の000／001等の不足表示へ対応付けます。完了のcheckpointも全ZIPへ確定します。旧形式はpartLabelsなしの従来番号を使用します。
+
+merged-archives.mjsはローカル表示専用です。同じサイト・アカウント内で元セットをopenArchivesで検証し、履歴IDを合成します。重複IDの内容は実際のJSONを読んで比較し、不一致または破損時は警告して曖昧なIDを除外します。各原稿は元のリーダーへ遅延委譲し、索引と表示に必要なデータを保持します。合成表示のcheckpointはnull、completeはfalseです。全体取得完了・再開を推測しません。各元セットの不足警告は合成画面にも残ります。
+
+サイトを追加する場合、現在なろうのその他カテゴリ名で行っている振り分けも、新ユニットの分類に合わせて拡張してください。サイトを登録するだけで未検証のバックアップが成立するとは限りません。
+
+
+viewer-files.mjsはサイト・アカウント・backupId・分割番号で追加ファイルを保持します。同じキーは64KiBのチャンクでバイト比較し、同一なら増やさず、異なる場合は先のファイルを保持して警告します。原稿全体をメモリへコピーしません。保持は画面内だけで、クリア後は参照を解除します。読み込み中のD&Dは待ち行列で処理し、読み込み済み・待機の件数に上限を設けます。フォルダ読込も同じ追加経路へ渡します。

@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>シンプルになろう（ビューワー）</title><style>:root{font-family:system-ui,"Yu Gothic",sans-serif;color:#17393f;background:#f3f7f5;font-size:14px;line-height:1.65}*{box-sizing:border-box}body{margin:0}.popup{width:390px}main{padding:22px}h1{font-size:26px;margin:0 0 12px}h2{font-size:16px}.eyebrow{color:#247366;font-size:12px;font-weight:700;letter-spacing:.08em;margin:0 0 4px}button{background:#167568;color:white;border:0;border-radius:8px;padding:11px 15px;font:inherit;font-weight:600;cursor:pointer;margin:4px 0}button:disabled{opacity:.5;cursor:default}.secondary{background:white;color:#24534c;border:1px solid #a7c8be}a{color:#176c61}.field{display:block;background:#fff;border:1px solid #c6d9d1;border-radius:8px;padding:10px;margin:10px 0}.field input{margin-right:8px}.field small{display:block;color:#54706d}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;margin:8px 0}.field pre{font-size:12px;max-height:90px;overflow:auto}.note{color:#536b68;font-size:12px}.library{max-width:960px;margin:auto;padding:40px 24px}.toolbar{display:flex;gap:10px;flex-wrap:wrap}details{border:1px solid #c6d9d1;background:#fff;padding:15px;border-radius:9px;margin:12px 0}summary{cursor:pointer;font-weight:600}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #df9928;outline-offset:3px}
+
+.backup-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:18px 0}.backup-tabs button{font:inherit;padding:9px 12px;border:1px solid #a7c8be;border-radius:7px;cursor:pointer;background:white;color:#24534c}.backup-tabs [aria-selected=true]{background:#167568;color:white}.backup-panel{background:#fff;padding:20px;border:1px solid #c6d9d1;border-radius:9px;min-height:220px}.backup-panel h3{margin-top:24px}.backup-card{border:1px solid #c6d9d1;padding:13px;border-radius:8px;margin:12px 0;overflow-wrap:anywhere}.backup-card summary{cursor:pointer;font-weight:600}.badge{display:inline-block;border-radius:5px;padding:2px 5px;margin-right:7px}.badge-episode{background:#e0f0e9;color:#155647}.badge-setting{background:#e6eafa;color:#394a86}.badge-blog{background:#fff0d8;color:#79511b}.meta,.backup-card small{font-size:12px;color:#54706d}.backup-field textarea{display:block;width:100%;font:14px/1.8 system-ui;resize:vertical;padding:10px;border:1px solid #bcd2c7;border-radius:6px}.backup-field button{font:inherit;padding:7px;margin-top:5px}.backup-panel select{max-width:100%;font:inherit;padding:5px}.backup-tabs button:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #df9928;outline-offset:3px}
+.backup-settings{border-collapse:collapse;width:100%;margin:20px 0}.backup-settings th,.backup-settings td{text-align:left;border-bottom:1px solid #dce6df;padding:16px 12px;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}.backup-settings th{width:165px;color:#193e3b}.backup-settings td{font-weight:400}@media(max-width:600px){.backup-settings th{width:110px}.backup-settings th,.backup-settings td{padding:12px 6px}}
+.backup-settings textarea{display:block;width:100%;font:14px/1.8 system-ui;resize:vertical;border:1px solid #bcd2c7;border-radius:6px;padding:10px}.backup-settings button{font-size:12px;margin-top:5px}
+
+button,.backup-tabs button{min-height:40px}.viewer-box{border:1px solid #c6d9d1;border-radius:10px;background:white;padding:16px;margin:16px 0}#drop{border:2px dashed #a7c8be;padding:18px;border-radius:8px}.drag{background:#e0f0e9}#warning{color:#923c18;white-space:pre-wrap;overflow-wrap:anywhere}#backup{max-width:100%;padding:8px}#top{position:fixed;bottom:16px;right:20px}input{max-width:100%}#file{display:block;width:100%;margin-top:8px}.toolbar>*{min-width:0}.toolbar label{max-width:100%}#backup{display:block;width:100%}.meta{overflow-wrap:anywhere}</style></head><body><main class="library">
+<h1>シンプルになろう（ビューワー）</h1>
+<p class="note">拡張機能・ネット接続は不要です。ZIPやJSONを読み込み、文章を確認・コピーできます。</p>
+<section class="viewer-box" aria-label="インポートエリア"><div id="drop">ZIP・JSONをここにドラッグ＆ドロップ、または <input id="file" type="file" accept=".zip,.json" multiple aria-label="バックアップファイルを選択"></div>
+<div class="toolbar"><button id="folder" class="secondary">ZIPのあるフォルダを読み込む</button><input id="folderFile" type="file" webkitdirectory multiple hidden><button id="clear" class="secondary">読み込みをクリア</button><label>表示するバックアップ <select id="backup" disabled aria-label="表示するバックアップ"></select></label></div>
+<p id="importStatus" class="note" role="status"></p><p id="status" role="status" aria-live="polite">ZIPを読み込んでください。後から不足ZIPを追加できます。数が多い場合はフォルダを読み込んでください。</p><p id="warning" role="alert"></p>
+<p class="note">ZIPは表示した項目から破損を確認します。未表示の項目は未検証です。関連作品の選択はこの画面を開いている間だけ有効です。</p></section>
+<div id="records"></div></main><button id="top" class="secondary">トップへ戻る</button><script>(() => {
+  const make=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
+  const source=record=>record.data?.sourceUrl||record.url||'';
+  const associationKey=record=>(record.ownerId||'未識別')+'|'+source(record);
+  function settingTitle(record){
+    if(record.category!=='作品設定')return record.category||'編集履歴';
+    return /\/receptionsupdateinput\//.test(source(record))?'公開・受付設定':'作品情報の編集';
+  }
+  function receptionRows(record){
+    const names={notkansou:'感想受付',notreview:'レビュー受付',notpoint:'評価受付',notpointview:'評価公開',notreport:'誤字報告受付',notsearch:'検索除外設定',_is_masterpiece:'代表作品設定'};
+    const groups=new Map();
+    for(const control of record.data?.controls||[]){if(!groups.has(control.name))groups.set(control.name,[]);groups.get(control.name).push(control);}
+    return [...groups].map(([name,controls])=>{
+      const first=controls[0],label=names[name]||name;
+      if(first.type==='radio'){
+        const chosen=controls.filter(control=>control.checked);
+        return {label,value:chosen.length?chosen.map(control=>control.optionLabel||control.label||'表示名未取得').join(' ／ '):'未選択'};
+      }
+      if(first.type==='checkbox')return {label,value:first.checked?(first.optionLabel||first.label||'設定する'):'設定しない'};
+      return {label,value:first.selectedText?.join(' ／ ')||first.value||'未入力'};
+    });
+  }
+  function workSettingRows(record){
+    const controls=record.data?.controls||[],rows=[];
+    const get=name=>controls.filter(control=>control.name===name);
+    const selected=name=>get(name).find(control=>control.checked);
+    const choiceNames={noveltype:{'1':'連載作品','2':'短編作品'},age_limit:{'1':'全年齢','3':'R18（18歳未満閲覧禁止）'},aitype:{'0':'不使用','1':'補助的利用','2':'間接利用','3':'直接使用'}};
+    function add(name,label){
+      const group=get(name);if(!group.length)return;
+      const control=group[0];let value;
+      if(control.type==='radio'){
+        const chosen=selected(name);
+        value=chosen?(chosen.optionLabel||choiceNames[name]?.[chosen.value]||(chosen.label!==label?chosen.label:'表示名未取得（内部値：'+chosen.value+'）')):'未選択';
+      }else if(control.type==='checkbox')value=name==='media_support'?(control.checked?'希望する':'希望しない'):name==='is_monetized'?(control.checked?'有効':'無効'):(control.checked?'チェックあり':'チェックなし');
+      else value=control.selectedText?.join(' ／ ')??control.value;
+      rows.push({label,value,multiline:control.type==='textarea'});
+    }
+    add('title','作品タイトル');add('writer_radio','作者名の表示');add('writer','作者名');add('noveltype','作品種別');add('end','完結設定');add('age_limit','年齢制限');add('isr15','セルフレイティング（R15）');
+    if(selected('age_limit')?.value==='3')add('nocgenre','R18部門');
+    add('aitype','AI利用状況設定');if((selected('aitype')&&selected('aitype').value!=='0')||get('ainote').some(control=>control.value))add('ainote','AI利用メモ');add('classification','作品分類');
+    // Show the branch that applies to this work; unused branches remain in raw data.
+    if(selected('classification')?.value==='2'){add('ff_type','二次創作の種類');add('ff_keyword','二次創作の対象作品');add('ff_ncode','原作のNコード');}
+    if(selected('classification')?.value==='3'){add('trpg_replay_type','TRPGリプレイの種類');add('trpg_replay_keyword_id','対象作品');add('official_scenario','公式シナリオ');add('scenario_author','シナリオ作者');add('scenario_name','シナリオ名');}
+    add('biggenre','大ジャンル');add('genre','小ジャンル');add('ex','あらすじ');
+    const elements=['iszankoku','isbl','isgl','istensei','istenni'].flatMap(name=>get(name).map(control=>(control.checked?'☑ ':'☐ ')+(control.optionLabel||control.label)));
+    if(elements.length)rows.push({label:'作品に含まれる要素',value:elements.join('\n')});
+    const keywords=controls.filter(control=>control.type==='checkbox'&&/keyword.*array/.test(control.name)&&control.checked).map(control=>control.value);
+    if(controls.some(control=>/keyword.*array/.test(control.name)&&control.type==='checkbox'))rows.push({label:'キーワード選択',value:keywords.length?[...new Set(keywords)].join(' ／ '):'選択なし'});
+    add('unique_keyword_array','キーワード入力');add('free_keyword','キーワード自由入力');add('keyword','キーワード');
+    add('media_support','メディア化打診のサポート');add('is_monetized','収益化設定');
+    return rows;
+  }
+  function consolidatedSettings(records){
+    const groups=new Map();
+    for(const record of records){
+      // Compare exact field values, including empty strings and duplicate fields,
+      // independently of their order and the URL used to reach the form.
+      const fields=record.fields.map(field=>[field.label,field.value]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+      // Checked states and named inputs can contain distinctions not in the
+      // visible fields. Preserve those distinctions when structured data exists.
+      const controls=Array.isArray(record.data?.controls)?record.data.controls.map(control=>({name:control.name,type:control.type,value:control.value,checked:control.checked,disabled:control.disabled,selectedText:control.selectedText})).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))):null;
+      const key=JSON.stringify([record.ownerId||'未識別',String(record.data?.workId||''),record.category,fields,controls]);
+      const existing=groups.get(key);
+      if(!existing){groups.set(key,{...record,mergedSources:[source(record)]});continue;}
+      const mergedSources=[...new Set([...existing.mergedSources,source(record)])];
+      groups.set(key,{...(record.savedAt>existing.savedAt?record:existing),mergedSources});
+    }
+    return [...groups.values()];
+  }
+  function model(all,owner){
+    const selected=all.filter(record=>(record.ownerId||'未識別')===owner).sort((a,b)=>a.savedAt.localeCompare(b.savedAt));
+    const latest=new Map();
+    for(const record of selected)latest.set((record.category||'編集履歴')+'|'+source(record),record);
+    const records=[...latest.values()],works=new Map();
+    const lists=records.filter(r=>r.category==='作品一覧').sort((a,b)=>{
+      const left=new URL(source(a),'https://syosetu.com'),right=new URL(source(b),'https://syosetu.com');
+      return Number(left.pathname.includes('draftlist'))-Number(right.pathname.includes('draftlist')) || Number(left.searchParams.get('p')||left.searchParams.get('page')||1)-Number(right.searchParams.get('p')||right.searchParams.get('page')||1);
+    });
+    for(const record of lists)for(const work of record.data?.entries||[])works.set(String(work.id),{...works.get(String(work.id)),...work});
+    for(const record of records.filter(r=>r.category==='作品情報'))if(record.data?.id)works.set(String(record.data.id),{...works.get(String(record.data.id)),...record.data});
+    return {records,works:[...works.values()],history:selected};
+  }
+  function copyAction(area,button,value){
+    let timer;button.onclick=async()=>{clearTimeout(timer);area.focus();area.select();try{await navigator.clipboard.writeText(value);button.textContent='コピーしました';timer=setTimeout(()=>button.textContent='この欄をコピー',2000);}catch{button.textContent='選択した文字をCtrl+Cでコピー';}};
+  }
+  function card(record,label=settingTitle(record)){
+    const item=make('details',undefined,'backup-card');
+    const summary=make('summary');summary.append(make('span','【'+label+'】','badge badge-'+(label==='エピソード'?'episode':label==='告知ページ'?'blog':'setting')),make('span',record.title));
+    const id=source(record).match(/(?:noveldataid|draftepisodeid|episodeid|blogkey)\/(\d+)/)?.[1];
+    summary.append(make('small',(record.data?.state?' ／ '+record.data.state:'')+(record.savedAt?' ／ 保存 '+new Date(record.savedAt).toLocaleString('ja-JP'):'')+(id?' ／ ページID:'+id:''),'meta'));
+    item.append(summary);
+    item.addEventListener('toggle',()=>{
+      if(!item.open||item.dataset.loaded)return;
+      const settings=record.category==='作品設定'&&record.data?.controls?.length?(/\/receptionsupdateinput\//.test(source(record))?receptionRows(record):workSettingRows(record)):[];
+      if(settings.length){
+        const table=make('table',undefined,'backup-settings'),body=make('tbody');
+        for(const field of settings){
+          const row=make('tr'),heading=make('th',field.label),cell=make('td');heading.setAttribute('scope','row');
+          if(field.multiline){
+            const area=make('textarea');area.readOnly=true;area.value=field.value;area.rows=field.value.length>150?8:3;area.setAttribute('aria-label',field.label);
+            const copy=make('button','この欄をコピー','secondary');copyAction(area,copy,field.value);
+            cell.append(area,copy);
+          }else cell.textContent=field.value===''?'未入力':field.value;
+          row.append(heading,cell);body.append(row);
+        }
+        table.append(body);item.append(table,make('p','バックアップ時点の設定です。変更・送信はできません。','note'));
+        const raw=make('details');raw.append(make('summary','保存元・内部値を確認'),make('p',record.mergedSources?.join(' ／ ')||source(record),'meta'),make('pre',JSON.stringify(record.data.controls,null,2)));item.append(raw);
+        item.dataset.loaded='true';return;
+      }
+      item.append(make('p',record.mergedSources?.length>1?'同一内容の保存元：'+record.mergedSources.join(' ／ '):source(record),'meta'));
+      for(const field of record.fields){
+        const box=make('section',undefined,'backup-field'),area=make('textarea');area.readOnly=true;area.value=field.value;area.rows=field.value.length>150?10:3;area.setAttribute('aria-label',field.label);
+        const copy=make('button','この欄をコピー','secondary');copyAction(area,copy,field.value);
+        box.append(make('h3',field.label),area,copy);item.append(box);
+      }
+      item.dataset.loaded='true';
+    });
+    return item;
+  }
+  function render(all,container,{preferences=[],associations={},onAssociation,onSelect}={}){
+    container.replaceChildren();
+    let owner=container.dataset.owner||all[0]?.ownerId||'未識別',active=container.dataset.activeKey||'';
+    const owners=[...new Set([...all.map(r=>r.ownerId||'未識別'),...preferences.map(p=>String(p.ownerId))])];
+    if(!owners.length){container.append(make('p','まだ保存データがありません。'));return;}
+    if(!owners.includes(owner))owner=owners[0];
+    const select=make('select');select.setAttribute('aria-label','ユーザーID');
+    for(const id of owners){const option=make('option',id);option.value=id;select.append(option);}select.value=owner;
+    const ownerLabel=make('label','ユーザーID ');ownerLabel.append(select);
+    const tabs=make('div',undefined,'backup-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','作品と保存項目');
+    const panel=make('section',undefined,'backup-panel');panel.id='backup-panel';panel.setAttribute('role','tabpanel');
+    const jump=make('select');jump.setAttribute('aria-label','作品へ移動');const jumpLabel=make('label','作品へ移動 ');jumpLabel.append(jump);
+    container.append(ownerLabel,make('p','作品は取得したなろうの一覧順です。本文・設定を未取得の作品も一覧に表示します。','note'),jumpLabel,tabs,panel);
+    function choose(key){active=key;container.dataset.activeKey=active;if(onSelect)onSelect(active);else draw();}
+    function draw(){
+      const data=model(all,owner),records=data.records;
+      const entries=[...data.works.map(work=>({key:'work:'+work.id,title:work.title,work})),...['ブックマーク','お気に入りユーザ','活動報告','共通設定','取得結果','取得履歴'].map(title=>({key:title,title}))];
+      if(!entries.some(entry=>entry.key===active))active=entries[0].key;
+      container.dataset.activeKey=active;container.dataset.owner=owner;
+      jump.replaceChildren();const blank=make('option','作品を選択');blank.value='';jump.append(blank);for(const work of data.works){const option=make('option',work.title);option.value='work:'+work.id;jump.append(option);}jump.value=active.startsWith('work:')?active:'';jump.onchange=()=>{if(jump.value)choose(jump.value);};
+      tabs.replaceChildren();
+      for(const entry of entries){const button=make('button',entry.title,'secondary');button.setAttribute('role','tab');button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-selected',String(entry.key===active));button.onclick=()=>choose(entry.key);tabs.append(button);}
+      tabs.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const buttons=[...tabs.children],current=buttons.indexOf(document.activeElement);const index=event.key==='Home'?0:event.key==='End'?buttons.length-1:(current+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;buttons[index].click();tabs.children[index].focus();};
+      const selected=entries.find(entry=>entry.key===active);panel.replaceChildren(make('h2',selected.title));
+      if(selected.work){
+        const work=selected.work,id=String(work.id),related=records.filter(r=>String(r.data?.workId)===id);
+        panel.append(make('p','作品ID:'+id+' ／ '+(work.publication||'投稿状態不明')+' ／ ユーザーID:'+owner,'meta'));
+        if(work.metadata?.length){const info=make('details');info.append(make('summary','作品情報'));for(const field of work.metadata)info.append(make('p',field.label+'：'+field.value));panel.append(info);}
+        const episodes=related.filter(r=>r.category==='エピソード').sort((a,b)=>(a.data?.order??0)-(b.data?.order??0));
+        panel.append(make('h3','エピソード（本文） '+episodes.length+'件'));
+        const episodeCards=episodes.map(record=>card(record));if(episodes.length>1){const episodePicker=make('select');episodePicker.setAttribute('aria-label','エピソードへ移動');const prompt=make('option','エピソードへ移動');prompt.value='';episodePicker.append(prompt);episodes.forEach((record,i)=>{const option=make('option',(i+1)+'：'+record.title);option.value=String(i);episodePicker.append(option);});episodePicker.onchange=()=>{if(episodePicker.value==='')return;const item=episodeCards[Number(episodePicker.value)];item.open=true;item.scrollIntoView({behavior:'smooth',block:'start'});};panel.append(episodePicker);}
+        for(const item of episodeCards)panel.append(item);
+        if(!episodes.length)panel.append(make('p','本文は未取得です。指定した作品範囲と取得結果を確認してください。'));
+        panel.append(make('h3','作品設定・章設定'));
+        for(const record of consolidatedSettings(related.filter(r=>['作品設定','章設定'].includes(r.category))))panel.append(card(record));
+        panel.append(make('p','前書き・後書きは各エピソード内、共通テンプレートは「共通設定」で確認できます。','note'));
+        const blogs=records.filter(r=>r.category==='活動報告'&&String(associations[associationKey(r)]||r.data?.workId||'')===id);
+        panel.append(make('h3','告知ページ（活動報告） '+blogs.length+'件'));
+        for(const record of blogs)panel.append(card(record,'告知ページ'));
+        if(!blogs.length)panel.append(make('p','「活動報告」タブで、この作品に関連する報告を選択できます。','note'));
+      }else if(['ブックマーク','お気に入りユーザ'].includes(active)){
+        const unique=new Map();for(const record of records.filter(r=>r.category===active))for(const entry of record.data?.entries||[])unique.set(entry.url||JSON.stringify(entry),{record,entry});
+        panel.append(make('p',unique.size+'件'));
+        for(const {record,entry} of unique.values())panel.append(card({...record,title:entry.title||entry.name||'名称不明',fields:Object.entries(entry).map(([label,value])=>({label,value:typeof value==='string'?value:JSON.stringify(value,null,2)??''}))},active));
+      }else if(active==='活動報告'){
+        panel.append(make('p','作品との関連は自動で推測せず、下の選択で指定します。作者の本文だけを表示します。','note'));
+        for(const record of records.filter(r=>r.category==='活動報告')){
+          const row=make('section'),label=make('label','関連作品 '),picker=make('select');picker.setAttribute('aria-label',record.title+'の関連作品');
+          const empty=make('option','関連なし／未指定');empty.value='';picker.append(empty);
+          for(const work of data.works){const option=make('option',work.title);option.value=String(work.id);picker.append(option);}
+          const key=associationKey(record);picker.value=associations[key]||record.data?.workId||'';
+          picker.onchange=async()=>{const value=picker.value,previous=associations[key];associations[key]=value;try{if(onAssociation)await onAssociation({...associations});draw();}catch(error){if(previous===undefined)delete associations[key];else associations[key]=previous;picker.value=previous||'';row.append(make('p','関連付けを保存できませんでした：'+error.message));}};
+          label.append(picker);row.append(label,card(record,'告知ページ'));panel.append(row);
+        }
+      }else if(active==='共通設定'){
+        for(const record of records.filter(r=>['テンプレート','カテゴリ'].includes(r.category)))panel.append(card(record));
+        for(const preference of preferences.filter(p=>String(p.ownerId)===owner))panel.append(card({title:preference.workId==='default'?'全作品共通':preference.title||'作品ID '+preference.workId,savedAt:preference.savedAt||preference.updatedAt||'',fields:[{label:'ダウンロード設定の控え',value:JSON.stringify(preference.settings,null,2)}]},'設定の控え'));
+      }else{
+        const rows=active==='取得履歴'?[...data.history].reverse():records.filter(r=>r.category==='取得結果');
+        for(const record of rows)panel.append(card(record));
+      }
+      if(panel.children.length===1)panel.append(make('p','この項目の保存データはありません。'));
+    }
+    select.onchange=()=>{owner=select.value;active='';draw();};draw();
+  }
+  globalThis.NarouOrganized={model,render,associationKey,consolidatedSettings,settingTitle,receptionRows,workSettingRows};
+})();
+
+(()=>{
+const modules=Object.create(null);
+modules["zip.mjs"]=(()=>{
+// STORE ZIP64. Each commit closes an ordinary readable ZIP; the next commit
+// replaces only its directory. Manuscript bytes are never buffered together.
+const encoder=new TextEncoder(),decoder=new TextDecoder('utf-8',{fatal:true});
+const table=Uint32Array.from({length:256},(_,n)=>{for(let i=0;i<8;i++)n=n&1?0xedb88320^(n>>>1):n>>>1;return n>>>0;});
+function crc32(bytes){let n=0xffffffff;for(const b of bytes)n=table[(n^b)&255]^(n>>>8);return (n^0xffffffff)>>>0;}
+function buffer(size){const b=new Uint8Array(size);return [b,new DataView(b.buffer)];}
+function safeNumber(n){if(n>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('この環境で扱えるZIPサイズを超えています。');return Number(n);}
+function local(name,bytes,offset){const n=encoder.encode(name),[b,v]=buffer(50+n.length);v.setUint32(0,0x04034b50,true);v.setUint16(4,45,true);v.setUint16(6,0x800,true);v.setUint16(12,33,true);v.setUint32(14,crc32(bytes),true);v.setUint32(18,0xffffffff,true);v.setUint32(22,0xffffffff,true);v.setUint16(26,n.length,true);v.setUint16(28,20,true);b.set(n,30);const p=30+n.length;v.setUint16(p,1,true);v.setUint16(p+2,16,true);v.setBigUint64(p+4,BigInt(bytes.length),true);v.setBigUint64(p+12,BigInt(bytes.length),true);return {header:b,entry:{name,offset,size:bytes.length,crc:crc32(bytes)}};}
+function central(e){const n=encoder.encode(e.name),[b,v]=buffer(74+n.length);v.setUint32(0,0x02014b50,true);v.setUint16(4,45,true);v.setUint16(6,45,true);v.setUint16(8,0x800,true);v.setUint16(14,33,true);v.setUint32(16,e.crc,true);v.setUint32(20,0xffffffff,true);v.setUint32(24,0xffffffff,true);v.setUint16(28,n.length,true);v.setUint16(30,28,true);v.setUint32(42,0xffffffff,true);b.set(n,46);const p=46+n.length;v.setUint16(p,1,true);v.setUint16(p+2,24,true);v.setBigUint64(p+4,BigInt(e.size),true);v.setBigUint64(p+12,BigInt(e.size),true);v.setBigUint64(p+20,BigInt(e.offset),true);return b;}
+function end(count,start,size){const [b,v]=buffer(98);v.setUint32(0,0x06064b50,true);v.setBigUint64(4,44n,true);v.setUint16(12,45,true);v.setUint16(14,45,true);v.setBigUint64(24,BigInt(count),true);v.setBigUint64(32,BigInt(count),true);v.setBigUint64(40,BigInt(size),true);v.setBigUint64(48,BigInt(start),true);v.setUint32(56,0x07064b50,true);v.setBigUint64(64,BigInt(start+size),true);v.setUint32(72,1,true);v.setUint32(76,0x06054b50,true);v.setUint16(84,65535,true);v.setUint16(86,65535,true);v.setUint32(88,0xffffffff,true);v.setUint32(92,0xffffffff,true);return b;}
+class ZipWriter{
+ constructor(handle){this.handle=handle;this.entries=[];this.offset=0;this.queue=Promise.resolve();this.failed=false;}
+ commit(files){const task=this.queue.then(()=>this.write(files));this.queue=task.catch(()=>{});return task;}
+ async write(files){if(this.failed)throw new Error('ZIP書き込みが失敗しました。新しい保存先で再開してください。');let stream;try{const last=this.entries.at(-1),replaceManifest=files.some(f=>f.name==='manifest.json');
+   // The manifest stays at the end: overwrite its previous bytes atomically.
+   const startOffset=replaceManifest&&last?.name==='manifest.json'?last.offset:this.offset;
+   stream=await this.handle.createWritable({keepExistingData:true});await stream.seek(startOffset);const additions=[];let offset=startOffset;for(const file of files){const bytes=typeof file.content==='string'?encoder.encode(file.content):file.content;const item=local(file.name,bytes,offset);await stream.write(item.header);await stream.write(bytes);additions.push(item.entry);offset+=item.header.length+bytes.length;}const replacements=new Set(additions.map(e=>e.name));const entries=[...this.entries.filter(e=>!replacements.has(e.name)),...additions];const start=offset;for(const e of entries){const bytes=central(e);await stream.write(bytes);offset+=bytes.length;}await stream.write(end(entries.length,start,offset-start));await stream.truncate(offset+98);await stream.close();this.entries=entries;this.offset=start;}catch(error){this.failed=true;try{await stream?.abort();}catch{}throw error;}}
+ estimatedSize(files=[]){const changed=new Set(files.map(f=>f.name));const entries=[...this.entries.filter(e=>!changed.has(e.name)),...files.map(f=>({name:f.name,size:typeof f.content==='string'?encoder.encode(f.content).length:f.content.length}))];return 98+entries.reduce((n,e)=>n+124+2*encoder.encode(e.name).length+e.size,0);}
+}
+class ZipReader{
+ constructor(file){this.file=file;this.entries=new Map();}
+ async bytes(offset,size){if(!Number.isSafeInteger(offset)||!Number.isSafeInteger(size)||offset<0||size<0||offset+size>this.file.size)throw new Error('ZIPの位置情報が不正です。');return new Uint8Array(await this.file.slice(offset,offset+size).arrayBuffer());}
+ async open(){if(this.file.size<98)throw new Error('ZIPが未完成、または形式が違います。');const tail=await this.bytes(this.file.size-98,98),v=new DataView(tail.buffer);if(v.getUint32(0,true)!==0x06064b50||v.getUint32(56,true)!==0x07064b50||v.getUint32(76,true)!==0x06054b50)throw new Error('この拡張機能のZIPを選んでください（公式ZIPは未対応）。');if(v.getUint32(16,true)||v.getUint32(20,true)||v.getUint32(60,true)||v.getUint32(72,true)!==1)throw new Error('分割ZIPは未対応です。');const count=safeNumber(v.getBigUint64(32,true)),size=safeNumber(v.getBigUint64(40,true)),start=safeNumber(v.getBigUint64(48,true));if(count>200000||size>64*1024*1024)throw new Error('ZIP内の項目が多すぎます。');if(start+size!==this.file.size-98)throw new Error('ZIPの末尾情報が一致しません。');const bytes=await this.bytes(start,size),d=new DataView(bytes.buffer);let p=0;for(let i=0;i<count;i++){if(p+46>bytes.length||d.getUint32(p,true)!==0x02014b50)throw new Error('ZIPの一覧が壊れています。');const nameLength=d.getUint16(p+28,true),extraLength=d.getUint16(p+30,true),comment=d.getUint16(p+32,true);if(p+46+nameLength+extraLength+comment>bytes.length)throw new Error('ZIPの一覧が途切れています。');const name=decoder.decode(bytes.slice(p+46,p+46+nameLength));if(!/^(?:manifest\.json|records\/[a-zA-Z0-9-]+\.(?:json|txt))$/.test(name)||this.entries.has(name))throw new Error('ZIP内に不正な項目があります。');const x=p+46+nameLength;if(extraLength!==28||d.getUint16(x,true)!==1||d.getUint16(x+2,true)!==24||d.getUint16(p+10,true)!==0||d.getUint16(p+8,true)!==0x800)throw new Error('非対応のZIP項目です。');const length=safeNumber(d.getBigUint64(x+4,true));if(d.getBigUint64(x+12,true)!==BigInt(length))throw new Error('ZIPサイズが一致しません。');this.entries.set(name,{name,size:length,offset:safeNumber(d.getBigUint64(x+20,true)),crc:d.getUint32(p+16,true)});p+=46+nameLength+extraLength+comment;}if(p!==size)throw new Error('ZIPの一覧サイズが不正です。');return this;}
+ async read(name,limit=16*1024*1024){const e=this.entries.get(name);if(!e||e.size>limit)throw new Error('ZIP内の項目がないか、大きすぎます：'+name);const b=await this.bytes(e.offset,30),v=new DataView(b.buffer);if(v.getUint32(0,true)!==0x04034b50||v.getUint16(8,true)!==0||v.getUint16(6,true)!==0x800)throw new Error('ZIP項目が壊れています。');const n=v.getUint16(26,true),x=v.getUint16(28,true);const nameBytes=await this.bytes(e.offset+30,n);if(decoder.decode(nameBytes)!==name)throw new Error('ZIP内の名前が一致しません。');const content=await this.bytes(e.offset+30+n+x,e.size);if(crc32(content)!==e.crc)throw new Error('ZIP内のデータが壊れています：'+name);return content;}
+ async json(name,limit){return JSON.parse(decoder.decode(await this.read(name,limit)).replace(/^\uFEFF/,''));}
+}
+
+return {crc32,ZipWriter,ZipReader};
+})();
+modules["sites/narou/work-id.mjs"]=(()=>{
+function narouWorkId(record){
+ const explicit=record.category==='作品情報'?record.data?.id:record.data?.workId||record.entity?.workId;
+ if(/^\d+$/.test(String(explicit||'')))return String(explicit);
+ try{
+  const url=new URL(record.url);
+  if(url.origin!=='https://syosetu.com'||url.username||url.password)return '';
+  return url.pathname.match(/^\/(?:(?:usernovelmanage|draftnovelmanage)\/(?:top|updateinput|receptionsupdateinput)|(?:usernoveldatamanage|draftepisode)\/updateinput)\/ncode\/(\d+)(?:\/(?:noveldataid|draftepisodeid|episodeid)\/\d+)?\/$/)?.[1]||'';
+ }catch{return '';}
+}
+
+return {narouWorkId};
+})();
+modules["sites/narou/unit.mjs"]=(()=>{
+const {narouWorkId}=modules["sites/narou/work-id.mjs"];
+const narouUnit=Object.freeze({
+  id:'narou',name:'小説家になろう',contractVersion:1,
+  managementOrigins:['https://syosetu.com'],
+  entryPaths:['/user/top/','/usernovel/list/','/usernovel/draftlist/'],
+  editPathPattern:/^\/(?:(?:usernovelmanage|draftnovelmanage)\/(?:updateinput|receptionsupdateinput)\/ncode\/\d+|(?:usernoveldatamanage|draftepisode)\/updateinput\/ncode\/\d+\/(?:noveldataid|draftepisodeid|episodeid)\/\d+|draftepisode\/updateinput\/draftepisodeid\/\d+|userblogmanage\/updateinput\/blogkey\/\d+|novelinitialsetting\/updateinput)\/$/,
+  accountIdPattern:/^\d+$/,
+  workIdPattern:/^\d+$/,
+  scripts:{account:['sites/narou/parser.js','sites/narou/runtime.js'],
+    collect:['sites/narou/parser.js','sites/narou/bulk.js','sites/narou/runtime.js'],
+    edit:['sites/narou/parser.js','sites/narou/capture.js','sites/narou/runtime.js']},
+  viewScripts:['sites/narou/organized.js'],viewGlobal:'NarouOrganized',
+  capabilities:{works:true,body:true,settings:true,bookmarks:true,following:true,announcements:true,editHistory:true,officialDownloadSettings:true},
+  recordWorkId:narouWorkId,
+  normalize(record){
+    const kinds={'作品一覧':'work-list','作品情報':'work','エピソード':'episode','作品設定':'settings','章設定':'chapter','テンプレート':'defaults','ブックマーク':'bookmarks','カテゴリ':'bookmark-categories','お気に入りユーザ':'following','活動報告':'announcement','取得結果':'report'};
+    const kind=kinds[record.category]||'edit-history';
+    const workId=narouWorkId(record);
+    const pageId=record.url.match(/(?:noveldataid|draftepisodeid|episodeid|blogkey)\/(\d+)/)?.[1];
+    return {...record,...(workId&&kind==='edit-history'?{data:{...record.data,workId}}:{}),siteId:'narou',schemaVersion:2,kind,entity:{...(workId?{workId:String(workId)}:{}),...(pageId?{id:pageId}:{})}};
+  }
+});
+
+return {narouUnit};
+})();
+modules["sites/registry.mjs"]=(()=>{
+const {narouUnit}=modules["sites/narou/unit.mjs"];
+// Register reviewed, working units here. A placeholder is never a supported site.
+const siteUnits=Object.freeze([narouUnit]);
+function findSite(value){
+  try{const url=new URL(value);if(url.protocol!=='https:'||url.username||url.password||url.port)return null;return siteUnits.find(unit=>unit.managementOrigins.includes(url.origin))||null;}catch{return null;}
+}
+function getSite(id){return siteUnits.find(unit=>unit.id===id)||null;}
+function checkpointKey(siteId,ownerId){
+  const unit=getSite(siteId);if(!unit||!unit.accountIdPattern.test(String(ownerId)))throw new Error('サイト・ユーザーIDを確認してください。');
+  return 'checkpoint:'+siteId+':'+ownerId;
+}
+function legacyCheckpointKey(siteId,ownerId){return siteId==='narou'?'checkpoint:'+ownerId:null;}
+
+return {siteUnits,findSite,getSite,checkpointKey,legacyCheckpointKey};
+})();
+modules["core.mjs"]=(()=>{
+const {findSite,getSite,checkpointKey,legacyCheckpointKey}=modules["sites/registry.mjs"];
+
+function allowedUrl(value){return !!findSite(value);}
+function backupEntryUrl(value){const unit=findSite(value);return !!unit&&unit.entryPaths.includes(new URL(value).pathname);}
+function validateSnapshot(value, senderUrl) {
+  if (!allowedUrl(senderUrl) || !value || !Array.isArray(value.fields) ||
+      !value.fields.length || value.fields.length > 100) throw new Error('保存対象を確認できません。');
+  const fields = value.fields.map(field => {
+    if (!field || typeof field.label !== 'string' || typeof field.value !== 'string' ||
+        field.label.length > 500) throw new Error('原稿データの形式が不正です。');
+    return {label: field.label, value: field.value};
+  });
+  if (JSON.stringify(fields).length > 4000000) throw new Error('原稿が大きすぎます。分けて保存してください。');
+  if (value.url && !allowedUrl(value.url)) throw new Error('保存元URLが不正です。');
+  const unit=findSite(senderUrl);
+  if(value.siteId&&value.siteId!==unit.id)throw new Error('保存元とサイト識別子が一致しません。');
+  if(value.url&&findSite(value.url)?.id!==unit.id)throw new Error('別サイトの原稿を混ぜて保存できません。');
+  const url = new URL(value.url || senderUrl);
+  // Query strings may contain tokens. Only the page path is retained.
+  const record = {url: url.origin + url.pathname, title: String(value.title || '無題').slice(0, 500), fields};
+  if (typeof value.category === 'string') record.category = value.category.slice(0, 100);
+  if (typeof value.runId === 'string') record.runId = value.runId.slice(0, 100);
+  if (value.ownerId !== undefined) {
+    if (!unit.accountIdPattern.test(String(value.ownerId))) throw new Error('ユーザーIDが不正です。');
+    record.ownerId = String(value.ownerId);
+  }
+  if (value.data !== undefined) {
+    const json = JSON.stringify(value.data);
+    if (json.length > 4000000) throw new Error('1ページのデータが大きすぎます。');
+    record.data = JSON.parse(json);
+  }
+  return unit.normalize(record);
+}
+
+function archiveText(records) {
+  return '\uFEFF' + records.map(record => [
+    '========================================', record.title,
+    '保存日時: ' + record.savedAt, '編集画面: ' + record.url,
+    ...record.fields.flatMap(field => ['\n【' + field.label + '】', field.value])
+  ].join('\n')).join('\n\n');
+}
+
+return {allowedUrl,backupEntryUrl,validateSnapshot,archiveText,findSite,getSite,checkpointKey,legacyCheckpointKey};
+})();
+modules["archive.mjs"]=(()=>{
+const {ZipWriter,ZipReader}=modules["zip.mjs"];
+const {archiveText,getSite}=modules["core.mjs"];
+function validRecord(r){return r&&typeof r.id==='string'&&/^[a-zA-Z0-9-]{1,100}$/.test(r.id)&&typeof r.title==='string'&&r.title.length<=500&&typeof r.savedAt==='string'&&Array.isArray(r.fields)&&r.fields.length<=100&&r.fields.every(f=>typeof f.label==='string'&&f.label.length<=500&&typeof f.value==='string');}
+function recordIndex(r){return {id:r.id,path:'records/'+r.id+'.json',siteId:r.siteId||'narou',ownerId:r.ownerId,category:r.category,title:r.title,url:r.data?.sourceUrl||r.url,savedAt:r.savedAt,workId:String(getSite(r.siteId||'narou')?.recordWorkId?.(r)||r.data?.workId||(r.category==='作品情報'?r.data?.id:'')||'')};}
+function samePage(a,b){return a.category===b.category&&a.ownerId===b.ownerId&&(a.siteId||'narou')===(b.siteId||'narou')&&a.url===b.url;}
+function completionIssues(m){const cp=m.checkpoint;if(!cp?.complete)return ['取得完了の記録がありません。'];const urls=new Set(m.records.map(r=>r.url)),issues=[];for(const [url,state] of Object.entries(cp.inventoryChecks||{}))if(!state.validated)issues.push('一覧の検証が未完了です：'+url);for(const url of cp.donePages||[])if(!urls.has(url))issues.push('保存済みページがZIP内にありません：'+url);if(cp.options?.works){const target=(cp.workPlan||[]).filter(w=>!cp.options.selectedWorkIds||cp.options.selectedWorkIds.includes(String(w.id)));for(const w of target){if(!cp.doneWorks?.includes(w.id)&&!cp.doneSelectedWorks?.includes(w.id))issues.push(w.title+'の取得が完了していません。');if(cp.options.includeBody!==false)for(const e of cp.episodePlans?.[w.id]||[])if(!urls.has(e.url))issues.push(w.title+'の本文が不足しています。');if(cp.options.includeSettings!==false&&!m.records.some(r=>r.workId===String(w.id)&&r.category==='作品設定'))issues.push(w.title+'の設定が不足しています。');}}return issues;}
+function textOutput(records,settings){let text=archiveText(records).replace(/^\uFEFF/,'').replace(/\r\n?|\n/g,settings.lineEnding==='lf'?'\n':settings.lineEnding==='cr'?'\r':'\r\n');if(settings.encoding==='utf-16le'||settings.encoding==='utf-16be'){const bytes=new Uint8Array(text.length*2+(settings.bom?2:0)),view=new DataView(bytes.buffer),le=settings.encoding==='utf-16le';let p=0;if(settings.bom){view.setUint16(0,0xfeff,le);p=2;}for(let i=0;i<text.length;i++)view.setUint16(p+i*2,text.charCodeAt(i),le);return bytes;}if(settings.encoding!=='utf-8')throw new Error('書き出し文字コードが未対応です。UTF-8またはUTF-16を選んでください。');return new TextEncoder().encode((settings.bom?'\uFEFF':'')+text);}
+class BackupArchive{
+ constructor(handle,context,settings,seed){this.writer=new ZipWriter(handle);this.manifest=seed?structuredClone(seed):{format:'simple-narou-zip',version:1,backupId:crypto.randomUUID(),siteId:context.siteId,ownerId:context.ownerId,createdAt:new Date().toISOString(),complete:false,records:[],works:[],checkpoint:null,settings,externalMedia:'references-only',downloadPreferences:[],blogAssociations:{}};this.manifest.complete=false;this.manifest.records=[];this.manifest.checkpoint=null;this.settings=this.manifest.settings||settings;}
+ async init(){await this.commit();}
+ async commit(files=[]){this.manifest.updatedAt=new Date().toISOString();await this.writer.commit([...files,{name:'manifest.json',content:JSON.stringify(this.manifest)}]);}
+ async add(record){if(!validRecord(record)||record.ownerId!==this.manifest.ownerId||(record.siteId||'narou')!==this.manifest.siteId)throw new Error('保存対象のアカウント・サイトが一致しません。');const index=recordIndex(record),before=this.manifest.records;const signature=JSON.stringify([record.category,record.url,record.fields,record.data]);
+   // Only unchanged logical pages are skipped; earlier differing versions remain.
+   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(signature)))).map(x=>x.toString(16).padStart(2,'0')).join('');
+   if(before.filter(e=>samePage(e,index)).at(-1)?.digest===digest)return;
+   this.manifest.records=[...before,{...index,digest}];if(record.category==='作品一覧'){const works=new Map(this.manifest.works.map(w=>[String(w.id),w]));for(const w of record.data?.entries||[])works.set(String(w.id),w);this.manifest.works=[...works.values()];}
+   const files=[{name:index.path,content:(this.settings.bom?'\uFEFF':'')+JSON.stringify(record)}];if(this.settings.format==='text')files.push({name:'records/'+record.id+'.txt',content:textOutput([record],this.settings)});
+   try{await this.commit(files);}catch(error){this.manifest.records=before;throw error;}
+ }
+ async checkpoint(report){this.manifest.checkpoint=report;this.manifest.complete=false;await this.commit();}
+ async finish(complete){if(complete){const issues=completionIssues(this.manifest);if(issues.length)throw new Error(issues[0]);}this.manifest.complete=!!complete;await this.commit();}
+}
+async function openArchive(file){const reader=await new ZipReader(file).open();const manifest=await reader.json('manifest.json',32*1024*1024);if(manifest.format!=='simple-narou-zip'||manifest.version!==1||!Array.isArray(manifest.records)||!Array.isArray(manifest.works)||typeof manifest.backupId!=='string'||!getSite(manifest.siteId)||!getSite(manifest.siteId).accountIdPattern.test(String(manifest.ownerId)))throw new Error('バックアップの管理情報が不正です。');const s=manifest.archiveSet;if(s&&(s.id!==manifest.backupId||!Number.isInteger(s.index)||s.index<1||s.index>100000||s.total!==null&&(!Number.isInteger(s.total)||s.total<s.index||s.total>100000)))throw new Error('分割番号の管理情報が不正です。');const seen=new Set();for(const e of manifest.records){if(!/^[a-zA-Z0-9-]+$/.test(e.id)||e.path!=='records/'+e.id+'.json'||seen.has(e.id))throw new Error('バックアップの項目情報が不正です。');seen.add(e.id);}const missing=manifest.records.filter(e=>!reader.entries.has(e.path));if(missing.length||!s&&manifest.complete&&completionIssues(manifest).length)manifest.complete=false;const integrityErrors=new Map(),verifiedIds=new Set();return {reader,fileSize:file.size,fileName:file.name,manifest,missing,integrityErrors,verifiedIds,async record(entry){try{const r=await reader.json(entry.path);if(!validRecord(r)||r.id!==entry.id||r.ownerId!==manifest.ownerId||(r.siteId||'narou')!==manifest.siteId)throw new Error('バックアップの原稿情報が一致しません。');verifiedIds.add(entry.id);return r;}catch(error){integrityErrors.set(entry.id,error.message);manifest.complete=false;throw error;}}};}
+
+return {validRecord,recordIndex,samePage,completionIssues,textOutput,BackupArchive,openArchive};
+})();
+modules["save-directory.mjs"]=(()=>{
+let cached;
+const DB='simple-narou-save-location';
+async function database(){return new Promise((resolve,reject)=>{const request=indexedDB.open(DB,1);request.onupgradeneeded=()=>request.result.createObjectStore('handles');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});}
+async function stored(value){const db=await database();try{return await new Promise((resolve,reject)=>{const tx=db.transaction('handles',value?'readwrite':'readonly'),store=tx.objectStore('handles'),request=value?store.put(value,'directory'):store.get('directory');let result;request.onsuccess=()=>result=request.result;tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('保存先を記憶できません。'));});}finally{db.close();}}
+async function savedDirectory(){return cached||(cached=await stored());}
+async function chooseDirectory(){if(!globalThis.showDirectoryPicker)throw new Error('このChromeではフォルダ指定を使えません。');const handle=await showDirectoryPicker({id:'simple-narou-save-folder',mode:'readwrite',startIn:'downloads'});cached=handle;try{await stored(handle);}catch(error){cached=null;throw error;}return handle;}
+async function writableDirectory(){let h=await savedDirectory();if(!h)h=await chooseDirectory();if(await h.queryPermission({mode:'readwrite'})!=='granted'&&await h.requestPermission({mode:'readwrite'})!=='granted')throw new Error('保存先フォルダへの書き込みを許可してください。');return h;}
+function backupName(ownerId,date=new Date()){if(!/^\d+$/.test(String(ownerId)))throw new Error('保存するユーザーIDを確認できません。');const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date);const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return ownerId+'-simple-narou-backup-'+p.year+p.month+p.day+'-'+p.hour+p.minute+p.second;}
+async function reserveBase(directory,base,split){for(let i=0;i<1000;i++){const candidate=base+(i?'-'+i:'');try{if(split){for(const suffix of ['-001','-000']){try{await directory.getFileHandle(candidate+suffix+'.zip');throw Object.assign(new Error('exists'),{name:'ExistsError'});}catch(error){if(error.name!=='NotFoundError')throw error;}}throw Object.assign(new Error('missing'),{name:'NotFoundError'});}await directory.getFileHandle(candidate+'.zip');}catch(error){if(error.name==='NotFoundError')return candidate;if(error.name!=='ExistsError')throw error;}}throw new Error('同名の保存ファイルが多すぎます。');}
+async function newFile(directory,name){try{await directory.getFileHandle(name);throw new Error('同名のファイルがあります。上書きしません：'+name);}catch(error){if(error.name!=='NotFoundError')throw error;}return directory.getFileHandle(name,{create:true});}
+
+return {savedDirectory,chooseDirectory,writableDirectory,backupName,reserveBase,newFile};
+})();
+modules["archive-set.mjs"]=(()=>{
+const {BackupArchive,openArchive,recordIndex,textOutput,validRecord,completionIssues,samePage}=modules["archive.mjs"];
+const {newFile}=modules["save-directory.mjs"];
+const encode=new TextEncoder();
+class ArchiveSet{
+ constructor(directory,base,context,settings,{limit=0,seed,separateOther=false}={}){this.directory=directory;this.base=base;this.context=context;this.settings=settings;this.limit=limit;this.parts=[];const initial=new BackupArchive(null,context,settings,seed);this.manifest=initial.manifest;delete this.manifest.archiveSet;this.manifest.backupId=crypto.randomUUID();this.manifest.settings=settings;this.manifest.records=[];this.manifest.checkpoint=null;this.current=null;this.separateOther=separateOther;this.streams={};this.component='works';delete this.manifest.partLabels;}
+ get writer(){return this.current.writer;}
+ async init(){await this.next();}
+ metadata(index,total=null,sealed=false){return {id:this.manifest.backupId,index,total,sealed,targetBytes:this.limit};}
+ async next(){const previous=this.separateOther?this.streams[this.component]:this.current,index=this.parts.length+1,number=this.parts.filter(p=>p.component===this.component).length+1,label=this.separateOther?(this.component==='other'?(number===1?'000':'000-'+String(number).padStart(3,'0')):String(number).padStart(3,'0')):String(index).padStart(3,'0'),name=this.base+((this.limit||this.separateOther)?'-'+label:'')+'.zip',handle=await newFile(this.directory,name);const part=new BackupArchive(handle,this.context,this.settings,this.manifest);part.manifest.backupId=this.manifest.backupId;part.manifest.archiveSet=this.metadata(index);part.manifest.works=structuredClone(this.manifest.works);part.manifest.settings=this.settings;try{await part.init();if(previous){previous.manifest.archiveSet=this.metadata(previous.manifest.archiveSet.index,null,true);await previous.commit();}}catch(error){try{await this.directory.removeEntry(name);}catch{}throw error;}part.component=this.component;part.label=label;this.parts.push(part);this.current=part;this.streams[this.component]=part;}
+ projected(files,extraRecords=[],checkpoint=this.current.manifest.checkpoint){const m={...this.current.manifest,records:[...this.current.manifest.records,...extraRecords],works:this.manifest.works,checkpoint,archiveSet:this.metadata(this.current.manifest.archiveSet.index,999999,true)};return this.current.writer.estimatedSize([...files,{name:'manifest.json',content:JSON.stringify(m)}]);}
+ async add(record){if(!validRecord(record)||record.ownerId!==this.context.ownerId||(record.siteId||'narou')!==this.context.siteId)throw new Error('保存対象のアカウント・サイトが一致しません。');const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',encode.encode(JSON.stringify([record.category,record.url,record.fields,record.data]))))).map(x=>x.toString(16).padStart(2,'0')).join('');if(this.manifest.records.filter(e=>samePage(e,recordIndex(record))).at(-1)?.digest===digest)return;
+ if(this.separateOther){this.component=['ブックマーク','お気に入りユーザ','活動報告','テンプレート','カテゴリ'].includes(record.category)?'other':'works';if(!this.streams[this.component])await this.next();this.current=this.streams[this.component];}
+ const index={...recordIndex(record),digest},files=[{name:index.path,content:(this.settings.bom?'\uFEFF':'')+JSON.stringify(record)}];if(this.settings.format==='text')files.push({name:'records/'+record.id+'.txt',content:textOutput([record],this.settings)});
+ if(this.limit&&this.current.manifest.records.length&&this.projected(files,[index])+65536>this.limit)await this.next();
+ this.current.manifest.works=structuredClone(this.manifest.works);await this.current.add(record);this.manifest.records.push(index);this.manifest.works=structuredClone(this.current.manifest.works);this.manifest.updatedAt=this.current.manifest.updatedAt;
+ }
+ async checkpoint(report){if(this.separateOther){this.component='works';this.current=this.streams.works;}if(this.limit&&this.current.manifest.records.length&&this.projected([],[],report)>this.limit)await this.next();await this.current.checkpoint(report);this.manifest.checkpoint=structuredClone(report);this.manifest.updatedAt=this.current.manifest.updatedAt;}
+ async finish(complete){if(complete){const issues=completionIssues(this.manifest);if(issues.length)throw new Error(issues[0]);}for(let i=0;i<this.parts.length;i++){const part=this.parts[i];part.manifest.works=structuredClone(this.manifest.works);part.manifest.complete=!!complete;if(this.separateOther)part.manifest.partLabels=this.parts.map(p=>p.label);part.manifest.archiveSet=this.metadata(i+1,this.parts.length,true);part.manifest.checkpoint=structuredClone(this.manifest.checkpoint);part.manifest.downloadPreferences=this.manifest.downloadPreferences;part.manifest.blogAssociations=this.manifest.blogAssociations;await part.commit();}this.manifest.complete=!!complete;}
+ async files(){const files=[];for(const part of this.parts)files.push(await part.writer.handle.getFile());return files;}
+ async discardEmpty(){if(this.manifest.records.length||this.manifest.checkpoint)return;for(const part of this.parts)await this.directory.removeEntry(part.writer.handle.name);}
+}
+async function openArchives(files){if(!files.length)throw new Error('ZIPを選んでください。');const archives=[];for(const file of files)archives.push(await openArchive(file));const first=archives[0],set=first.manifest.archiveSet;if(!set){if(files.length!==1)throw new Error('別々の単一ZIPは混ぜられません。同じバックアップの分割ZIPを選んでください。');return first;}
+ const indexes=new Set(),locations=new Map(),ids=new Set();for(const a of archives){const m=a.manifest,s=m.archiveSet;if(!s||s.id!==set.id||m.backupId!==first.manifest.backupId||m.siteId!==first.manifest.siteId||m.ownerId!==first.manifest.ownerId)throw new Error('異なるバックアップ・アカウントのZIPは混ぜられません。');if(indexes.has(s.index))throw new Error('同じ分割番号が重複しています。');indexes.add(s.index);for(const entry of m.records){if(ids.has(entry.id))throw new Error('分割ZIPの原稿IDが重複しています。');ids.add(entry.id);locations.set(entry.id,a);}}
+ archives.sort((a,b)=>a.manifest.archiveSet.index-b.manifest.archiveSet.index);const totals=new Set(archives.map(a=>a.manifest.archiveSet.total).filter(n=>n!==null));if(totals.size>1)throw new Error('分割数の管理情報が一致しません。');const count=[...totals][0]||Math.max(...indexes)+(archives.at(-1).manifest.archiveSet.sealed?1:0);if(count<Math.max(...indexes))throw new Error('分割番号が総数を超えています。');const labels=archives.map(a=>a.manifest.partLabels).filter(Boolean);if(labels.some(l=>!Array.isArray(l)||l.length!==count||l.some(x=>typeof x!=='string'||!/^\d{3,6}(?:-\d{3,6})?$/.test(x))||new Set(l).size!==l.length)||labels.some(l=>JSON.stringify(l)!==JSON.stringify(labels[0])))throw new Error('分割ファイルの管理情報が不正です。');const missingParts=[];for(let i=1;i<=count;i++)if(!indexes.has(i))missingParts.push(labels[0]?.[i-1]||i);
+ const last=archives.at(-1),checkpoint=archives.filter(a=>a.manifest.checkpoint).at(-1)?.manifest.checkpoint||null;const works=new Map();for(const a of archives)for(const w of a.manifest.works)works.set(String(w.id),w);
+ const manifest={...last.manifest,works:[...works.values()],records:archives.flatMap(a=>a.manifest.records),checkpoint,complete:archives.every(a=>a.manifest.complete)&&!!totals.size&&!missingParts.length};const missing=archives.flatMap(a=>a.missing);if(missing.length||manifest.complete&&completionIssues(manifest).length)manifest.complete=false;
+ const integrityErrors=new Map(),verifiedIds=new Set();return {manifest,archives,missing,missingParts,integrityErrors,verifiedIds,setTotal:totals.size?count:null,fileSize:archives.reduce((n,a)=>n+a.fileSize,0),fileName:archives.map(a=>a.fileName).join('、'),fileNames:archives.map(a=>a.fileName),async record(entry){try{const record=await locations.get(entry.id).record(entry);verifiedIds.add(entry.id);return record;}catch(error){integrityErrors.set(entry.id,error.message);manifest.complete=false;throw error;}}};
+}
+
+return {ArchiveSet,openArchives};
+})();
+modules["merged-archives.mjs"]=(()=>{
+const {openArchive}=modules["archive.mjs"];
+const {openArchives}=modules["archive-set.mjs"];
+
+function canonical(value){if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';return JSON.stringify(value);}
+// Merge is a read-only view. It never creates a resumable collection checkpoint.
+async function openMergedArchives(files){
+ if(!files.length)throw new Error('ZIPを選んでください。');
+ const sets=new Map();let identity;
+ for(const file of files){const a=await openArchive(file),m=a.manifest,key=m.siteId+'|'+m.ownerId;if(identity&&identity!==key)throw new Error('別のサイト・アカウントは合成できません。');identity=key;if(!sets.has(m.backupId))sets.set(m.backupId,[]);sets.get(m.backupId).push(file);}
+ const sources=[];for(const group of sets.values())sources.push(await openArchives(group));
+ sources.sort((a,b)=>String(a.manifest.updatedAt||a.manifest.createdAt).localeCompare(String(b.manifest.updatedAt||b.manifest.createdAt)));
+ if(sources.length===1)return sources[0];
+ const locations=new Map(),indexes=new Map(),conflicts=new Set(),works=new Map(),integrityErrors=new Map(),verifiedIds=new Set(),preferences=new Map(),associations={};
+ const missingParts=[],missing=[];
+ for(const a of sources){
+  for(const n of a.missingParts||[])missingParts.push(a.fileName+'：'+String(n).padStart(3,'0'));
+  missing.push(...a.missing.map(n=>a.fileName+'：'+n));
+  for(const w of a.manifest.works)works.set(String(w.id),{...works.get(String(w.id)),...w});
+  for(const p of a.manifest.downloadPreferences||[])preferences.set(p.url||canonical(p),p);
+  Object.assign(associations,a.manifest.blogAssociations||{});
+  for(const e of a.manifest.records){
+   if(conflicts.has(e.id))continue;
+   if(indexes.has(e.id)){
+    try{const old=await locations.get(e.id).record(indexes.get(e.id)),next=await a.record(e);if(canonical(old)!==canonical(next))throw new Error('同じ履歴IDの内容が異なります。');}
+    catch(error){conflicts.add(e.id);indexes.delete(e.id);locations.delete(e.id);integrityErrors.set(e.id,'履歴ID '+e.id+'：'+error.message);}
+   }else{indexes.set(e.id,e);locations.set(e.id,a);}
+  }
+ }
+ const last=sources.at(-1).manifest,manifest={...last,backupId:'merged-view',records:[...indexes.values()].sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt))),works:[...works.values()],checkpoint:null,complete:false,downloadPreferences:[...preferences.values()],blogAssociations:associations};delete manifest.archiveSet;delete manifest.partLabels;
+ return {manifest,sources,merged:true,missing,missingParts,integrityErrors,verifiedIds,fileName:files.map(f=>f.name).join('、'),async record(entry){try{const r=await locations.get(entry.id).record(entry);verifiedIds.add(entry.id);return r;}catch(error){integrityErrors.set(entry.id,error.message);throw error;}}};
+}
+
+return {openMergedArchives};
+})();
+modules["archive-view.mjs"]=(()=>{
+function historyEntries(entries,page=0,size=100){
+ const sorted=[...entries].sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
+ const pages=Math.max(1,Math.ceil(sorted.length/size)),current=Math.max(0,Math.min(page,pages-1));
+ const end=sorted.length-current*size;
+ return {entries:sorted.slice(Math.max(0,end-size),end),page:current,pages,total:sorted.length};
+}
+
+return {historyEntries};
+})();
+modules["viewer-files.mjs"]=(()=>{
+const {openArchive}=modules["archive.mjs"];
+
+async function equalFiles(a,b){
+ if(a.size!==b.size)return false;
+ // Compare bounded chunks: a large ZIP is never loaded into memory at once.
+ for(let offset=0;offset<a.size;offset+=65536){
+  const x=new Uint8Array(await a.slice(offset,offset+65536).arrayBuffer()),y=new Uint8Array(await b.slice(offset,offset+65536).arrayBuffer());
+  if(x.some((value,i)=>value!==y[i]))return false;
+ }
+ return true;
+}
+class ViewerFiles{
+ constructor(){this.entries=new Map();this.warnings=new Set();}
+ clear(){this.entries.clear();this.warnings.clear();}
+ async add(files){
+  let added=0,duplicates=0;
+  for(const file of files){
+   try{
+    const a=await openArchive(file),m=a.manifest,key=[m.siteId,m.ownerId,m.backupId,m.archiveSet?.index||'single'].join('|');
+    const previous=this.entries.get(key);
+    if(previous){if(await equalFiles(previous.file,file)){duplicates++;continue;}throw new Error('同じバックアップ・分割番号で内容が異なります。先に読み込んだZIPを保持しました。差し替える場合は「読み込みをクリア」してください。');}
+    if(this.entries.size>=1000)throw new Error('保持できるZIPは1000個までです。別のフォルダを読む前にクリアしてください。');
+    this.entries.set(key,{file,manifest:m});added++;
+   }catch(error){this.warnings.add(file.name+'：'+error.message);}
+  }
+  return {added,duplicates,entries:[...this.entries.values()],warnings:[...this.warnings]};
+ }
+}
+
+return {ViewerFiles};
+})();
+modules["offline-viewer.js"]=(()=>{
+const {openArchives}=modules["archive-set.mjs"];
+const {openMergedArchives}=modules["merged-archives.mjs"];
+const {validRecord,recordIndex}=modules["archive.mjs"];
+const {historyEntries}=modules["archive-view.mjs"];
+const {getSite}=modules["sites/registry.mjs"];
+const {ViewerFiles}=modules["viewer-files.mjs"];
+const held=new ViewerFiles(),observedErrors=new Set(),pending=[];
+const $=id=>document.getElementById(id);
+let archive=null,json=null,groups=[],associations={},generation=0,reading=false;
+function normalize(r){return getSite(r.siteId||'narou')?.normalize(r)||r;}
+function backupDate(value){const date=new Date(value);return Number.isNaN(date.getTime())?'日時不明':new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(date)+'（日本時間）';}
+function latest(entries){const map=new Map();for(const e of [...entries].sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt))))map.set((e.category||'編集履歴')+'|'+e.url,e);return [...map.values()];}
+function inventory(m){return {id:'offline-inventory',ownerId:m.ownerId,siteId:m.siteId,category:'作品一覧',title:'保存した作品一覧',savedAt:m.updatedAt||m.createdAt||'',url:'https://syosetu.com/usernovel/list/',fields:[],data:{entries:m.works}};}
+function status(){
+ if(!archive)return;
+ const a=archive,m=a.manifest,errors=[...a.integrityErrors.values()];for(const error of errors)observedErrors.add(a.fileName+'：'+error);
+ $('status').textContent=''+(a.merged?'合成表示 ':'ZIP内 ')+m.records.length+'件 ／ 作品 '+m.works.length+'件 ／ 検証済み '+a.verifiedIds.size+' / '+m.records.length+'件';
+ $('warning').textContent=[a.missingParts?.length?'分割不足：'+a.missingParts.map(n=>String(n).padStart(3,'0')).join(', ')+'。不足するZIPを続けてD&Dしてください。数が多い場合は「ZIPのあるフォルダを読み込む」を使えます。':'',a.missing.length?'未取得 '+a.missing.length+'件。':'',observedErrors.size?'読み込み済みZIPの破損・衝突警告：'+[...observedErrors].join(' ／ '):'',...held.warnings].filter(Boolean).join(' ');
+}
+async function draw(key='',page=0){
+ const token=++generation;
+ if(!archive){if(!json)return;const list=json.records.map(normalize),owners=[...new Set(list.map(r=>r.ownerId))],inventories=[];
+  for(const ownerId of owners){const own=list.filter(r=>r.ownerId===ownerId),allWorks=new Map();for(const r of own){if(r.category==='作品一覧')for(const w of r.data?.entries||[])allWorks.set(String(w.id),w);if(r.category==='作品情報'&&r.data?.id)allWorks.set(String(r.data.id),r.data);}for(const r of own){const id=recordIndex(r).workId;if(id&&!allWorks.has(id))allWorks.set(id,{id,title:'作品ID '+id});}inventories.push(inventory({ownerId,siteId:'narou',works:[...allWorks.values()]}));}list.unshift(...inventories);
+  $('records').dataset.activeKey=key;NarouOrganized.render(list,$('records'),{preferences:json.downloadPreferences||[],associations,onAssociation:value=>associations=value});return;
+ }
+ const a=archive,m=a.manifest;if(!key)key=m.works.length?'work:'+m.works[0].id:'取得履歴';
+ const work=key.startsWith('work:')?key.slice(5):null,h=key==='取得履歴'?historyEntries(m.records,page):null;
+ const entries=(h?h.entries:latest(m.records)).filter(e=>work?e.workId===work||e.category==='活動報告'&&associations[m.ownerId+'|'+e.url]===work:key==='共通設定'?['テンプレート','カテゴリ'].includes(e.category):key==='取得履歴'?true:e.category===key);
+ const loaded=[inventory(m)];for(const e of entries){try{loaded.push(normalize(await a.record(e)));}catch{}}
+ if(token!==generation)return;
+ $('records').dataset.activeKey=key;NarouOrganized.render(loaded,$('records'),{preferences:m.downloadPreferences||[],associations,onAssociation:value=>associations=value,onSelect:draw});
+ if(h&&h.pages>1){const nav=document.createElement('div');nav.className='toolbar';nav.setAttribute('aria-label','取得履歴のページ');const newer=document.createElement('button'),older=document.createElement('button'),label=document.createElement('span');newer.textContent='新しい履歴';older.textContent='古い履歴';newer.className=older.className='secondary';newer.disabled=h.page===0;older.disabled=h.page===h.pages-1;newer.onclick=()=>draw('取得履歴',h.page-1);older.onclick=()=>draw('取得履歴',h.page+1);label.textContent=(h.page+1)+' / '+h.pages+'ページ（1ページ100件）';nav.append(newer,label,older);$('records').prepend(nav);}
+ status();
+}
+async function chooseGroup(){const group=groups[Number($('backup').value)];if(!group)return;archive=await (group.merged?openMergedArchives:openArchives)(group.files);json=null;associations=structuredClone(archive.manifest.blogAssociations||{});delete $('records').dataset.owner;await draw();}
+function clear(){
+ if(reading)return;++generation;held.clear();observedErrors.clear();archive=null;json=null;groups=[];associations={};$('records').replaceChildren();delete $('records').dataset.owner;$('backup').replaceChildren();$('backup').disabled=true;$('file').value='';$('folderFile').value='';$('importStatus').textContent='読み込みをクリアしました。保存ファイルは変更しません。';$('status').textContent='ZIPを読み込んでください。後から追加できます。';$('warning').textContent='';
+}
+async function load(files){
+ if(reading){const batch=Array.from(files);if(pending.reduce((n,b)=>n+b.length,0)+batch.length<=1000)pending.push(batch);else $('warning').textContent='追加待ちのZIPが多すぎます。読み込みが終わってから追加してください。';return;}reading=true;for(const id of ['file','backup','folder','clear'])$(id).disabled=true;
+ try{
+  files=Array.from(files);if(!files.length)throw new Error('ZIPまたはJSONを選んでください。');if(files.length>1000)throw new Error('一度に読み込めるファイルは1000個までです。');
+  const zips=files.filter(f=>f.name.toLowerCase().endsWith('.zip'));
+  if(zips.length){
+   const result=await held.add(zips);if(!result.entries.length)throw new Error(result.warnings.join(' ／ '));
+   const map=new Map();for(const entry of result.entries){const m=entry.manifest,key=m.siteId+'|'+m.ownerId+'|'+m.backupId;let group=map.get(key);if(!group){group={files:[],date:m.createdAt||'',owner:m.ownerId,site:m.siteId};map.set(key,group);}group.files.push(entry.file);}
+   const individual=[...map.values()].sort((a,b)=>b.date.localeCompare(a.date)),accounts=new Map();for(const g of individual){const k=g.site+'|'+g.owner;if(!accounts.has(k))accounts.set(k,{files:[],date:g.date,owner:g.owner,site:g.site,merged:true,sets:0});const account=accounts.get(k);account.files.push(...g.files);account.sets++;}
+   groups=[...[...accounts.values()].filter(g=>g.sets>1),...individual];$('backup').replaceChildren();
+   groups.forEach((g,i)=>{const option=document.createElement('option');option.value=String(i);option.textContent='ID:'+g.owner+' ／ '+(g.merged?'全バックアップを合成（'+g.sets+'組）':backupDate(g.date))+' ／ ZIP '+g.files.length+'個';$('backup').append(option);});
+   await chooseGroup();$('importStatus').textContent='ZIP '+held.entries.size+'個を保持中。追加 '+result.added+'個'+(result.duplicates?' ／ 重複 '+result.duplicates+'個は追加しませんでした。':'。')+' 後から不足ZIPを追加できます。「表示するバックアップ」で合成表示・保存操作ごとの表示を切り替えます。';
+  }else{
+   if(files.length!==1||!files[0].name.toLowerCase().endsWith('.json'))throw new Error('ZIP、またはJSONを1つ選んでください。');
+   if(held.entries.size)throw new Error('ZIPを保持しています。JSONに切り替える場合は「読み込みをクリア」してください。');
+   const file=files[0];if(file.size>60*1024*1024)throw new Error('JSONは60MBまでです。大量データはZIPをご利用ください。');const data=JSON.parse((await file.text()).replace(/^\uFEFF/,''));if(!(data.format==='narou-local-backup'&&data.version===1||data.format==='novel-site-backup'&&data.version===2)||!Array.isArray(data.records)||!data.records.every(validRecord)||data.records.some(r=>!getSite(r.siteId||'narou')))throw new Error('このツールで保存したJSONを選んでください。');archive=null;json=data;associations=structuredClone(data.blogAssociations||{});delete $('records').dataset.owner;await draw();$('status').textContent='JSON内 '+data.records.length+'件';$('warning').textContent='';$('importStatus').textContent=file.name+' を読み込みました。';
+  }
+ }catch(error){$('warning').textContent='読み込みできませんでした：'+error.message+' 読み込み済みのファイルは保持しています。';}
+ finally{reading=false;for(const id of ['file','folder','clear'])$(id).disabled=false;$('backup').disabled=!groups.length;$('file').value='';$('folderFile').value='';if(pending.length)void load(pending.shift());}
+}
+$('clear').onclick=clear;
+$('file').onchange=e=>load(e.target.files);
+$('backup').onchange=async()=>{if(reading)return;reading=true;$('file').disabled=true;$('backup').disabled=true;$('clear').disabled=true;$('folder').disabled=true;try{await chooseGroup();}catch(error){$('warning').textContent='読み込みできませんでした：'+error.message;$('records').replaceChildren();archive=null;}finally{reading=false;$('file').disabled=false;$('backup').disabled=false;$('clear').disabled=false;$('folder').disabled=false;if(pending.length)void load(pending.shift());}};
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('drag');};$('drop').ondragleave=()=>$('drop').classList.remove('drag');$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('drag');load(e.dataTransfer.files);};
+$('folder').onclick=async()=>{try{if(!window.showDirectoryPicker){$('folderFile').click();return;}const directory=await window.showDirectoryPicker({mode:'read'}),files=[];for await(const h of directory.values())if(h.kind==='file'&&h.name.toLowerCase().endsWith('.zip'))files.push(await h.getFile());await load(files);}catch(error){if(error.name!=='AbortError')$('warning').textContent='フォルダを読み込めません：'+error.message+' ZIPをドラッグ＆ドロップしてください。';}};
+$('folderFile').onchange=e=>load([...e.target.files].filter(f=>f.name.toLowerCase().endsWith('.zip')&&(!f.webkitRelativePath||f.webkitRelativePath.split('/').length===2)));
+$('top').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
+
+return {};
+})();
+})();</script></body></html>

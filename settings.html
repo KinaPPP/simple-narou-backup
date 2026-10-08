@@ -1,0 +1,14 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>ダウンロード設定の控え</title><link rel="stylesheet" href="style.css"></head>
+<body><main class="library"><p class="eyebrow">シンプルになろう（バックアップ）</p><h1>公式ダウンロード設定の控え</h1>
+<p>設定をユーザーIDごとに、全作品共通または作品別で保存できます。作品別の設定がある場合はそちらを優先します。</p>
+<p class="note">初めて使う場合は公式のテキストダウンロード画面を開き、拡張機能の「この画面のダウンロード設定を記録」を押してください。</p>
+<div class="field"><label>ユーザーID <select id="owner"></select></label></div>
+<div class="field"><label>適用範囲 <select id="work"></select></label></div>
+<div class="field"><label>文字コード <select id="encoding"><option value="utf-8">UTF-8</option><option value="utf-16le">UTF-16LE</option><option value="utf-16be">UTF-16BE</option><option value="shift_jis">Shift_JIS</option><option value="euc-jp">EUC-JP</option><option value="jis">JIS</option></select></label>
+<p><label><input id="bom" type="checkbox"> BOMを付ける</label></p>
+<label>改行コード <select id="lineEnding"><option value="crlf">CR+LF（Windows向け）</option><option value="cr">CR（Macintosh向け）</option><option value="lf">LF（UNIX向け）</option></select></label></div>
+<button id="save">この範囲の設定を保存</button><button id="inherit" class="secondary">作品別設定を解除して共通設定を使う</button>
+<p id="status" role="status" aria-live="polite"></p>
+<p class="note">この版では設定を記録し、バックアップJSONにも含めます。公式画面への自動適用と、この設定による文字コード変換は未実装です。拡張機能のJSON・全履歴テキスト出力は引き続きUTF-8です。</p>
+</main><script type="module" src="settings.js"></script></body></html>
+

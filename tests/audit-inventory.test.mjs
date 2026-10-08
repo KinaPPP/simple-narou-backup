@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFile} from 'node:fs/promises';import {webcrypto} from 'node:crypto';
+test('活動報告一覧の件数不一致も再開時に再走査し、不足の解消まで完了にしない',async()=>{
+ const root='https://syosetu.com';let cp,number=1;const requests=[];
+ const doc=url=>({kind:url.includes('/userblog/list/')?'list':'body',querySelector:s=>s==='.l-container'?{}:null,querySelectorAll:()=>Array.from({length:number},(_,i)=>({querySelector:s=>s.startsWith('a[')?{getAttribute:()=>'/userblogmanage/updateinput/blogkey/'+(i+1)+'/'}:{textContent:'架空の活動報告'}}))});
+ const parser={ownerId:()=> '123',safeUrl:(u,base)=>new URL(u,base||root).href,main:d=>d.kind==='list'?'全2件中':'',pages:()=>[],list:()=>[],text:n=>n?.textContent||'',form:()=>[{name:'textarea',label:'本文',value:'架空本文'}],formFields:c=>c.map(f=>({label:f.label,value:f.value}))};
+ const ctx=vm.createContext({NarouParser:parser,document:{},location:{href:root+'/user/top/',pathname:'/user/top/'},crypto:webcrypto,URL,AbortController,Date,Math,setTimeout:(f,ms)=>{if(ms<30000)f();return 1;},clearTimeout(){},fetch:async url=>{requests.push(url);return {ok:true,url,text:async()=>url};},DOMParser:class{parseFromString(url){return doc(url);}},chrome:{runtime:{sendMessage:async m=>{if(m.type==='checkpoint')cp=structuredClone(m.report);return {ok:true,checkpoint:cp};}}}});
+ vm.runInContext(await readFile(new URL('../sites/narou/bulk.js',import.meta.url),'utf8'),ctx);
+ async function run(resume){await ctx.narouBulkBackup.start({quiet:true,announcements:true,maxPages:100,resume});for(let i=0;i<100;i++){await new Promise(r=>setImmediate(r));if(!ctx.narouBulkBackup.getStatus().running)return;}throw new Error('timeout');}
+ await run(false);assert.equal(cp.complete,false);await run(true);assert.equal(cp.complete,false);assert.equal(requests.filter(u=>u===root+'/userblog/list/').length,2);number=2;await run(true);assert.equal(cp.complete,true);assert.equal(cp.inventoryChecks[root+'/userblog/list/'].recognized,2);assert.equal(requests.filter(u=>u===root+'/userblogmanage/updateinput/blogkey/1/').length,1);
+});
