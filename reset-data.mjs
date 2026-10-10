@@ -1,2 +1,2 @@
-export function acquiredKeys(data){return Object.keys(data).filter(k=>k.startsWith('snapshot:')||k.startsWith('checkpoint:')||k.startsWith('bulk-checkpoint:')||k==='blog-associations');}
+export function acquiredKeys(data){return Object.keys(data).filter(k=>k.startsWith('diagnostics:')||k.startsWith('settings-schema:')||k.startsWith('snapshot:')||k.startsWith('checkpoint:')||k.startsWith('bulk-checkpoint:')||k==='blog-associations');}
 export async function removeAcquiredData(storage){const data=await storage.get(null);const keys=acquiredKeys(data);if(keys.length)await storage.remove(keys);return keys.length;}

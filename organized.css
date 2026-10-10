@@ -1,3 +1,30 @@
 .backup-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:18px 0}.backup-tabs button{font:inherit;padding:9px 12px;border:1px solid #a7c8be;border-radius:7px;cursor:pointer;background:white;color:#24534c}.backup-tabs [aria-selected=true]{background:#167568;color:white}.backup-panel{background:#fff;padding:20px;border:1px solid #c6d9d1;border-radius:9px;min-height:220px}.backup-panel h3{margin-top:24px}.backup-card{border:1px solid #c6d9d1;padding:13px;border-radius:8px;margin:12px 0;overflow-wrap:anywhere}.backup-card summary{cursor:pointer;font-weight:600}.badge{display:inline-block;border-radius:5px;padding:2px 5px;margin-right:7px}.badge-episode{background:#e0f0e9;color:#155647}.badge-setting{background:#e6eafa;color:#394a86}.badge-blog{background:#fff0d8;color:#79511b}.meta,.backup-card small{font-size:12px;color:#54706d}.backup-field textarea{display:block;width:100%;font:14px/1.8 system-ui;resize:vertical;padding:10px;border:1px solid #bcd2c7;border-radius:6px}.backup-field button{font:inherit;padding:7px;margin-top:5px}.backup-panel select{max-width:100%;font:inherit;padding:5px}.backup-tabs button:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #df9928;outline-offset:3px}
 .backup-settings{border-collapse:collapse;width:100%;margin:20px 0}.backup-settings th,.backup-settings td{text-align:left;border-bottom:1px solid #dce6df;padding:16px 12px;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere}.backup-settings th{width:165px;color:#193e3b}.backup-settings td{font-weight:400}@media(max-width:600px){.backup-settings th{width:110px}.backup-settings th,.backup-settings td{padding:12px 6px}}
 .backup-settings textarea{display:block;width:100%;font:14px/1.8 system-ui;resize:vertical;border:1px solid #bcd2c7;border-radius:6px;padding:10px}.backup-settings button{font-size:12px;margin-top:5px}
+
+.backup-tabs{margin:12px 0}.backup-panel{padding:16px}.backup-card{margin:8px 0;padding:12px}.backup-settings{margin:12px 0}.backup-settings th,.backup-settings td{padding:10px 12px}
+
+.backup-field textarea,.backup-settings textarea{background:#effbff;color:#172d32}
+.backup-settings tbody tr:nth-child(even){background:#f5f6f6}
+.collapse-item{display:block;margin-top:12px;min-height:40px}
+.schema-warning{background:#fff8df;color:#76580c;padding:8px 10px;border-radius:6px;overflow-wrap:anywhere}
+
+.history-heading{display:flex;align-items:center;flex-wrap:wrap;gap:12px 20px;margin-bottom:12px}
+.history-heading h2{margin:0}
+.history-pager{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.history-pager button{box-sizing:border-box;min-width:110px;height:40px;padding:0 14px;font:inherit;white-space:nowrap}
+.history-page-count,.history-page-size{white-space:nowrap}
+
+/* Fixed import area: long notices scroll without moving the manuscript list. */
+#drop.backup-drop{box-sizing:border-box;height:250px;display:grid;grid-template-rows:30px 52px 44px minmax(0,1fr);gap:6px;padding:12px;background:#effcfc;overflow:hidden}
+#drop.backup-drop.drag{background:#d9f2f6;border-color:#418f9e}
+.backup-drop .drop-count,.backup-drop .drop-help{margin:0;overflow:auto;white-space:normal;overflow-wrap:anywhere;font-size:13px;line-height:1.5}
+.backup-drop .drop-file{display:flex;flex-wrap:wrap;align-content:start;align-items:center;gap:5px;font-size:13px;overflow:auto}
+#drop.backup-drop input{max-width:100%;min-width:0;width:auto;display:inline-block;margin:0}
+.backup-drop .drop-messages{overflow:auto;min-height:0;overflow-wrap:anywhere;white-space:pre-wrap}
+#drop.backup-drop .drop-messages p{margin:0 0 4px;font-size:13px;line-height:1.5;color:#193e3b}
+.backup-drop .drop-messages p:empty{display:none}
+#drop.backup-drop .drop-messages [data-level="warning"]{color:#76500b;font-weight:700}
+#drop.backup-drop .drop-messages [data-level="error"]{color:#a21d28;font-weight:700;font-size:16px}
+
+.unofficial-notice{font-size:13px;line-height:1.7;color:#365953;margin:20px 0 60px;overflow-wrap:anywhere}

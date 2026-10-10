@@ -8,3 +8,46 @@
 .exports .export-label{display:flex;align-items:center;min-height:40px;flex-shrink:0}
 .exports button{width:140px}
 .exports .export-label{flex-basis:100%;min-height:22px;margin-top:4px}
+
+.account,.batch{padding:14px}.toolbar,.scope,.pace,.debug{margin:8px 0}.status-box{margin:10px 0}.exports .export-label{min-height:18px;margin-top:0}.work-choices{margin:10px 0}#saved,.reset-area{margin-top:20px}#saved h2{margin-bottom:8px}#drop{padding:12px;margin:8px 0}.account .note{margin:6px 0}.status-box p:empty{display:none}
+
+/* Determinate progress stays below every status message. */
+#coverage #progressText{height:22px;line-height:22px;margin:2px 0;font-size:13px}
+#coverage .progress-panel{height:22px;margin-top:6px;gap:10px}
+#coverage #gauge{--fill:#28a745;appearance:none;-webkit-appearance:none;width:100%;flex:1;min-width:0;height:12px;border:0;border-radius:6px;overflow:hidden;background:#e0e9e4;accent-color:var(--fill)}
+#coverage #gauge::-webkit-progress-bar{background:#e0e9e4;border-radius:6px}
+#coverage #gauge::-webkit-progress-value{background:var(--fill);border-radius:6px;transition:width .6s ease}
+#coverage #gauge::-moz-progress-bar{background:var(--fill);border-radius:6px}
+#coverage #gauge.paused{--fill:#a7cbb1}
+#coverage #gauge.warning{--fill:#d6a21b}
+#coverage #gauge.error{--fill:#cf4545}
+#coverage #progressPercent{flex:0 0 40px;text-align:right;font-variant-numeric:tabular-nums}
+@media(prefers-reduced-motion:reduce){#coverage #gauge::-webkit-progress-value{transition:none}}
+
+.batch-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 12px}.batch-heading .note{margin:0}.scope .split-control{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;font-size:13px}.split-note{margin:6px 0}
+
+#coverage .progress-panel{width:50%;min-width:0}
+#coverage #status,#coverage #exportStatus,#coverage #schemaStatus,#coverage #availabilityStatus{height:auto;min-height:0;white-space:normal;overflow-wrap:anywhere;line-height:1.6;margin:3px 0}
+#schemaStatus{color:#86620d}#saved #drop{background:#effcfc}#saved #drop.drag{background:#d9f2f6;border-color:#418f9e}
+.import-status{margin:8px 0;padding:8px 12px}.import-status p{margin:3px 0;overflow-wrap:anywhere}
+
+.operations #reportButton{width:auto;min-width:116px;margin-left:auto}
+.report-area{background:#fff;border:1px solid #c6d9d1;border-radius:10px;padding:16px;margin-top:20px;scroll-margin-top:16px}
+.report-area[hidden]{display:none}
+.report-field{margin:14px 0}.report-field>label{display:block;font-weight:600}
+.report-field textarea{display:block;width:100%;font:14px/1.7 system-ui;background:#effbff;border:1px solid #a7c8be;border-radius:6px;padding:10px;resize:vertical;overflow-wrap:anywhere}
+.report-url{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}.report-url input{flex:1;min-width:160px;max-width:100%;font:inherit;padding:8px;border:1px solid #a7c8be;border-radius:6px}
+.report-url input:disabled{background:#edf1f0;color:#899590}.report-area button{min-height:40px}
+#reportStatus{white-space:pre-wrap;overflow-wrap:anywhere;color:#76500b}
+
+/* Report actions share the width needed by the longest label and a 40px height. */
+.report-area button{width:180px;max-width:100%;height:40px;flex-shrink:0;white-space:nowrap}
+.report-field #reportOutput{background:#f0f8ef;border-color:#bfd6ba}
+#reportPrepare{background:#c8def7;color:#20466d;border-color:#a3c3e9}
+#reportForm{background:#cbe9ce;color:#235a30;border-color:#a3cea8}
+.report-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px}
+.report-actions #reportForm{margin-left:auto}
+.report-url #reportURLCheck{margin-left:auto}
+.report-reload{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:4px 0 20px}
+.report-reload #reportRefresh{width:auto;padding-left:18px;padding-right:18px}
+.report-reload label{display:inline-flex;align-items:center;gap:4px;font-size:12px}

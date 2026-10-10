@@ -1,3 +1,5 @@
+import {errorCode,createDiagnosticStore} from '../diagnostics.mjs';
+import {settingSchema,schemaKey,compareSettingSchema} from '../settings-schema.mjs';
 import {findSite,checkpointKey,legacyCheckpointKey} from '../core.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +13,7 @@ test('アイコンの取得元を保持して詳細タブを再利用し、閉�
   storage:{local:{setAccessLevel:async()=>{}},session:{get:async key=>({[key]:session[key]}),set:async data=>Object.assign(session,structuredClone(data))}},
   scripting:{executeScript:async args=>args.files?[]:[{result:{ownerId:'123',userName:'作者'}}]},
   tabs:{onRemoved:{addListener:()=>{}},get:async id=>{if(!tabs.has(id))throw new Error('closed');return tabs.get(id);},update:async(id,options)=>updates.push({id,...options}),create:async options=>{const tab={id:100+created.length,url:options.url};tabs.set(tab.id,tab);created.push(tab);return tab;}}};
- const context=vm.createContext({findSite,checkpointKey,legacyCheckpointKey,chrome,allowedUrl,validateSnapshot,crypto:globalThis.crypto});
+ const context=vm.createContext({errorCode,createDiagnosticStore,settingSchema,schemaKey,compareSettingSchema,findSite,checkpointKey,legacyCheckpointKey,chrome,allowedUrl,validateSnapshot,crypto:globalThis.crypto});
  vm.runInContext((await readFile(new URL('background.js',base),'utf8')).replace(/^import[^\n]+\n/gm,''),context);
  assert.equal(typeof click,'function');
  await Promise.all([context.openDetail({id:7,url:'https://syosetu.com/user/top/?ref=header'}),context.openDetail({id:7,url:'https://syosetu.com/user/top/?ref=header'})]);

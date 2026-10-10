@@ -1,7 +1,10 @@
+import {errorCode,createDiagnosticStore} from './diagnostics.mjs';
+import {settingSchema,schemaKey,compareSettingSchema} from './settings-schema.mjs';
 import {removeAcquiredData} from './reset-data.mjs';
 import {validateSnapshot,allowedUrl,findSite,checkpointKey,legacyCheckpointKey} from './core.mjs';
 
 const ready = chrome.storage.local.setAccessLevel({accessLevel: 'TRUSTED_CONTEXTS'});
+const appendDiagnostic=createDiagnosticStore(chrome.storage.local);
 let opening=Promise.resolve();let resetting=false;const jobs=new Set();
 function tracked(task){const promise=task();jobs.add(promise);promise.finally(()=>jobs.delete(promise)).catch(()=>{});return promise;}
 function openDetail(sourceTab){
@@ -21,8 +24,25 @@ function openDetail(sourceTab){
   });
   return opening;
 }
+async function diagnosticSaveFailure(sender,error,ownerId,siteId){
+  try{if(resetting)return;const {sourceContext:c}=await chrome.storage.session.get('sourceContext');
+    if(sender.id!==chrome.runtime.id||sender.frameId!==0||sender.tab?.id!==c?.tabId||!allowedUrl(sender.url)||!ownerId||ownerId!==c?.ownerId||siteId!==(c.siteId||'narou')||findSite(sender.url)?.id!==siteId)return;
+    await appendDiagnostic(siteId,ownerId,{kind:'save_error',stage:'save',code:errorCode(error)});
+  }catch{}
+}
 chrome.action.onClicked.addListener(tab=>{openDetail(tab).catch(()=>{});});
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if(message?.type==='diagnosticEvent'){
+    tracked(async()=>{
+      if(resetting)throw new Error('リセット中です。');
+      await ready;
+      const {sourceContext,detailTabId}=await chrome.storage.session.get(['sourceContext','detailTabId']);
+      const detail=sender.id===chrome.runtime.id&&sender.tab?.id===detailTabId&&sender.url===chrome.runtime.getURL('detail.html');
+      const source=sender.id===chrome.runtime.id&&sender.frameId===0&&sender.tab?.id===sourceContext?.tabId&&allowedUrl(sender.url)&&findSite(sender.url)?.id===(sourceContext?.siteId||'narou');
+      if((!detail&&!source)||!sourceContext?.ownerId||message.ownerId!==sourceContext.ownerId||message.siteId!==(sourceContext.siteId||'narou'))throw new Error('診断の取得元を確認できません。');
+      await appendDiagnostic(message.siteId,message.ownerId,message.event);reply({ok:true});
+    }).catch(()=>reply({ok:false}));return true;
+  }
   if(message?.type==='resetData'){
     (async()=>{
       const {detailTabId,sourceContext,archiveSink}=await chrome.storage.session.get(['detailTabId','sourceContext','archiveSink']);
@@ -85,7 +105,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         }
         await chrome.storage.local.set({[key]:{...message.report,siteId:unit.id}});reply({ok:true});
       }
-    }).catch(error=>reply({ok:false,error:error.message}));
+    }).catch(async error=>{await diagnosticSaveFailure(sender,error,message.ownerId,message.siteId||findSite(sender.url)?.id);reply({ok:false,error:error.message});});
     return true;
   }
   if (message?.type === 'openLibrary' && sender.id === chrome.runtime.id) {
@@ -100,6 +120,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     const record = validateSnapshot(message.snapshot, sender.url);
     record.id = crypto.randomUUID();
     record.savedAt = new Date().toISOString();
+    const schema=settingSchema(record),key=schema?schemaKey(record):null;
+    const previousSchema=key?(await chrome.storage.local.get(key))[key]:null;
+    const change=schema?compareSettingSchema(previousSchema?.items,schema):null;
+    const warning=change||previousSchema?.warning;
+    if(warning)record.data.settingsSchemaChange=warning;
     // Each version has its own key, avoiding lost updates between tabs.
     const {archiveSink}=await chrome.storage.session.get('archiveSink');
     if(archiveSink&&archiveSink.sourceTabId===sender.tab.id&&archiveSink.ownerId===record.ownerId&&archiveSink.siteId===record.siteId){
@@ -114,8 +139,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       const same=previous&&JSON.stringify(previous.fields)===JSON.stringify(record.fields)&&JSON.stringify(previous.data)===JSON.stringify(record.data);
       if(!same)await chrome.storage.local.set({['snapshot:' + record.id]: record});
     }
+    if(key)await chrome.storage.local.set({[key]:{items:schema,warning:warning||null}});
     reply({ok: true, savedAt: record.savedAt});
-  }).catch(error => reply({ok: false, error: '保存できませんでした。容量不足などを確認し、原稿をファイルにも保存してください。 ' + error.message}));
+  }).catch(async error => {await diagnosticSaveFailure(sender,error,message.snapshot?.ownerId,message.snapshot?.siteId||findSite(sender.url)?.id);reply({ok: false, error: '保存できませんでした。容量不足などを確認し、原稿をファイルにも保存してください。 ' + error.message});});
   return true;
 });
 

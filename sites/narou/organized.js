@@ -48,6 +48,8 @@
     if(controls.some(control=>/keyword.*array/.test(control.name)&&control.type==='checkbox'))rows.push({label:'キーワード選択',value:keywords.length?[...new Set(keywords)].join(' ／ '):'選択なし'});
     add('unique_keyword_array','キーワード入力');add('free_keyword','キーワード自由入力');add('keyword','キーワード');
     add('media_support','メディア化打診のサポート');add('is_monetized','収益化設定');
+    const known=new Set(['title','writer_radio','writer','noveltype','end','age_limit','isr15','nocgenre','aitype','ainote','classification','ff_type','ff_keyword','ff_ncode','trpg_replay_type','trpg_replay_keyword_id','official_scenario','scenario_author','scenario_name','biggenre','genre','ex','iszankoku','isbl','isgl','istensei','istenni','unique_keyword_array','free_keyword','keyword','media_support','is_monetized']);
+    for(const c of controls){if(known.has(c.name)||/keyword.*array/.test(c.name)||['hidden','submit','button','reset'].includes(c.type))continue;known.add(c.name);add(c.name,c.label||c.name);}
     return rows;
   }
   function consolidatedSettings(records){
@@ -83,12 +85,23 @@
   function copyAction(area,button,value){
     let timer;button.onclick=async()=>{clearTimeout(timer);area.focus();area.select();try{await navigator.clipboard.writeText(value);button.textContent='コピーしました';timer=setTimeout(()=>button.textContent='この欄をコピー',2000);}catch{button.textContent='選択した文字をCtrl+Cでコピー';}};
   }
+  function collapseControl(item){
+    if(!item.open)return;
+    if(!item._collapseControl){
+      const button=make('button','▲ この項目を折りたたむ','secondary collapse-item');button.type='button';
+      button.onclick=()=>{item.open=false;const summary=item.children[0];summary?.scrollIntoView?.({behavior:'smooth',block:'nearest'});summary?.focus?.({preventScroll:true});};
+      item._collapseControl=button;
+    }
+    item.append(item._collapseControl);
+  }
+  if(document.addEventListener)document.addEventListener('toggle',event=>{if(event.target.tagName==='DETAILS')collapseControl(event.target);},true);
   function card(record,label=settingTitle(record)){
     const item=make('details',undefined,'backup-card');
     const summary=make('summary');summary.append(make('span','【'+label+'】','badge badge-'+(label==='エピソード'?'episode':label==='告知ページ'?'blog':'setting')),make('span',record.title));
     const id=source(record).match(/(?:noveldataid|draftepisodeid|episodeid|blogkey)\/(\d+)/)?.[1];
     summary.append(make('small',(record.data?.state?' ／ '+record.data.state:'')+(record.savedAt?' ／ 保存 '+new Date(record.savedAt).toLocaleString('ja-JP'):'')+(id?' ／ ページID:'+id:''),'meta'));
     item.append(summary);
+    if(record.data?.settingsSchemaChange){const diff=record.data.settingsSchemaChange;item.append(make('p','設定項目の構成が前回と異なります。設定を含めて再取得し、内容を確認してください。'+(diff.added?.length?' 追加：'+diff.added.join('、'):'')+(diff.removed?.length?' 見つからない項目：'+diff.removed.join('、'):''),'schema-warning'));}
     item.addEventListener('toggle',()=>{
       if(!item.open||item.dataset.loaded)return;
       const settings=record.category==='作品設定'&&record.data?.controls?.length?(/\/receptionsupdateinput\//.test(source(record))?receptionRows(record):workSettingRows(record)):[];
@@ -105,7 +118,7 @@
         }
         table.append(body);item.append(table,make('p','バックアップ時点の設定です。変更・送信はできません。','note'));
         const raw=make('details');raw.append(make('summary','保存元・内部値を確認'),make('p',record.mergedSources?.join(' ／ ')||source(record),'meta'),make('pre',JSON.stringify(record.data.controls,null,2)));item.append(raw);
-        item.dataset.loaded='true';return;
+        collapseControl(item);item.dataset.loaded='true';collapseControl(item);return;
       }
       item.append(make('p',record.mergedSources?.length>1?'同一内容の保存元：'+record.mergedSources.join(' ／ '):source(record),'meta'));
       for(const field of record.fields){
@@ -113,7 +126,7 @@
         const copy=make('button','この欄をコピー','secondary');copyAction(area,copy,field.value);
         box.append(make('h3',field.label),area,copy);item.append(box);
       }
-      item.dataset.loaded='true';
+      collapseControl(item);item.dataset.loaded='true';
     });
     return item;
   }
@@ -182,5 +195,18 @@
     }
     select.onchange=()=>{owner=select.value;active='';draw();};draw();
   }
-  globalThis.NarouOrganized={model,render,associationKey,consolidatedSettings,settingTitle,receptionRows,workSettingRows};
+  function historyPager(container,state,onPage){
+    const panel=container.querySelector('.backup-panel');
+    if(!panel||state.pages<=1)return;
+    const heading=panel.firstElementChild,row=make('div',undefined,'history-heading');
+    const nav=make('div',undefined,'history-pager');nav.setAttribute('aria-label','取得履歴のページ');
+    const newer=make('button','新しい履歴','secondary'),older=make('button','古い履歴','secondary');
+    newer.disabled=state.page===0;older.disabled=state.page===state.pages-1;
+    newer.onclick=()=>onPage(state.page-1);older.onclick=()=>onPage(state.page+1);
+    const count=make('span',(state.page+1)+'／'+state.pages,'history-page-count');
+    count.setAttribute('aria-label',(state.page+1)+'／'+state.pages+'ページ');
+    nav.append(newer,count,older,make('span','（1ページ100件）','history-page-size'));
+    panel.insertBefore(row,heading);row.append(heading,nav);
+  }
+  globalThis.NarouOrganized={historyPager,model,render,associationKey,consolidatedSettings,settingTitle,receptionRows,workSettingRows};
 })();

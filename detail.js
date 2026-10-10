@@ -1,13 +1,18 @@
+import {setupReportUI} from './report-ui.mjs';
+import {recordDiagnostic} from './diagnostic-client.mjs';
+import {belongsToSelection} from './export-selection.mjs';
+import {acquisitionActive} from './acquisition-state.mjs';
+import {gaugeState} from './progress-state.mjs';
 import {setupArchiveUI} from './zip-ui.mjs';
-import {currentArchive,importedRecords,refresh as refreshLibrary} from './library.js';
+import {currentArchive,importedRecords,exportEntries,refresh as refreshLibrary} from './library.js';
 import {allowedUrl,backupEntryUrl,findSite,checkpointKey,legacyCheckpointKey} from './core.mjs';
 import {normalizePreference,preferenceKey} from './preferences.mjs';
 import {backupState} from './backup-state.mjs';
 const $ = id => document.getElementById(id);
 let tabId;
 let pageUrl;
-let coverageState;
-let busy=false;let libraryWriting=false;
+let coverageState;let coverageOwner='';
+let busy=false;let starting=false;let libraryWriting=false;
 const inventoryAttempted=new Set();
 let restoredRun;
 let activeSiteId='narou';
@@ -17,6 +22,7 @@ window.addEventListener('backup-imported',()=>{inventoryFromSite=false;});
 window.addEventListener('backup-library-view',()=>{inventoryFromSite=true;refreshCoverage();});
 function requirements(){return {siteId:activeSiteId,includeBody:$('includeBody').checked,includeSettings:$('includeSettings').checked,includeOther:$('includeOther').checked,selectedWorkIds:$('allWorks').checked?null:[...$('selectedWorks').selectedOptions].map(option=>option.value)};}
 window.addEventListener('library-writing',e=>{libraryWriting=e.detail;buttons();});
+window.addEventListener('library-data-changed',()=>buttons());
 function buttons(){
   if(libraryWriting){for(const id of ['bulk','resume','fresh','inventory','quick','stop','settings','json','txt','zipExport','refresh','file','splitMode','resetData'])$(id).disabled=true;return;}
   if(archiveUI?.locked){for(const id of ['bulk','fresh','inventory','quick','includeBody','includeSettings','includeOther','autoContinue','maxPages','waitSeconds','settings','json','txt','zipExport','refresh','file','splitMode','resetData'])$(id).disabled=true;$('resume').disabled=busy||!archiveUI.paused;$('stop').disabled=!busy;for(const button of $('workChoices').children)button.disabled=true;return;}
@@ -24,7 +30,11 @@ function buttons(){
   for(const id of ['settings','zipExport','file','refresh','splitMode','resetData'])$(id).disabled=busy;
   $('resetData').disabled=busy;
   $('quick').disabled=!sourceAvailable||busy||!!coverageState?.pending;
-  for(const id of ['json','txt'])$(id).disabled=busy; 
+  const work=$('allWorks').checked?null:[...$('selectedWorks').selectedOptions][0]?.value;
+  const scope=work?{ownerId:coverageOwner,siteId:activeSiteId,workId:work}:null;
+  const available=exportEntries().some(e=>scope?belongsToSelection(e,scope):true)&&($('allWorks').checked||!!work);
+  for(const id of ['json','txt','zipExport'])$(id).disabled=busy||!available;
+  $('availabilityStatus').textContent=busy?'':available?'':'保存するデータがありません。取得するか、ZIP・JSONを読み込んでください。';
   const canContinue=coverageState?.pending||coverageState?.completed.length>0&&!coverageState?.allComplete;
   $('resume').disabled=!sourceAvailable||busy||(currentArchive&&!inventoryFromSite?!archiveUI?.canResume:!(canContinue||archiveUI?.canResume));
   $('pace').disabled=busy;
@@ -38,7 +48,10 @@ function buttons(){
 }
 async function refreshCoverage(){
   const {sourceContext}=await chrome.storage.session.get('sourceContext');
+  coverageOwner=sourceContext?.ownerId||currentArchive?.manifest.ownerId||importedRecords()?.[0]?.ownerId||'';
   const all=await chrome.storage.local.get(null);
+  const changed=Object.entries(all).filter(([key,v])=>key.startsWith('settings-schema:'+activeSiteId+':'+coverageOwner+':')&&v?.warning&&v?.items);
+  $('schemaStatus').textContent=changed.length?'設定項目の構成が前回と異なります。設定を含めて再取得し、内容を確認してください。':'';
   let records=Object.entries(all).filter(([key])=>key.startsWith('snapshot:')).map(([,value])=>value);
   const unit=findSite(sourceContext?.url);
   activeSiteId=unit?.id||'narou';
@@ -69,7 +82,7 @@ async function refreshCoverage(){
   $('coverageNext').textContent=coverageState.allComplete?'JSON・テキストを書き出し、保存先のファイルを確認してください。':coverageState.pending?'休憩中は自動再開を待てます。一時停止・エラーの後は「続きから取得」を押してください。':'対象を選び「取得を開始」を押してください。「全部保存」または作品を1つ選べます。';
   for(const id of ['coverageTitle','coverageCount','coverageNext'])$(id).title=$(id).textContent;
   if(currentArchive&&!inventoryFromSite)await archiveUI?.update({running:false,waiting:false,complete:currentArchive.manifest.complete});
-  buttons();
+  buttons();renderGauge();
   $('remainingWorks').replaceChildren();
   for(const work of coverageState.remaining){const item=document.createElement('li');item.textContent=work.title;$('remainingWorks').append(item);}
   if(!coverageState.remaining.length){const item=document.createElement('li');item.textContent=coverageState.total?'作品の未取得はありません。お気に入り・活動報告の状態も確認してください。':'作品一覧はまだ取得していません。';$('remainingWorks').append(item);}
@@ -95,25 +108,32 @@ async function showContext(){
 }
 let coverageTimer;
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes.sourceContext)showContext();if(area==='local'&&Object.keys(changes).some(key=>key.startsWith('checkpoint:')||key.startsWith('snapshot:'))){clearTimeout(coverageTimer);coverageTimer=setTimeout(refreshCoverage,700);}});
-let polling=false;
+function renderGauge(state={}){
+  const manifest=archiveUI?.progressManifest;
+  const result=gaugeState({state,manifest,coverage:coverageState});
+  $('gauge').hidden=false;$('gauge').value=result.percent;$('gauge').className=result.level;
+  $('progressPercent').textContent=result.percent+'%';
+  $('gauge').setAttribute('aria-valuetext',result.percent+'%（作品数を基準にした目安）'+({paused:'・停止中',warning:'・警告',error:'・エラー'}[result.level]||''));
+}
+let polling=false,connectionLost=false;
 async function progress(){
   if(polling)return;polling=true;
   try{
     const {sourceContext}=await chrome.storage.session.get('sourceContext');
-    if(!sourceContext?.tabId){sourceAvailable=false;buttons();return;}
+    if(!sourceContext?.tabId){sourceAvailable=false;buttons();renderGauge();return;}
     try{await sourceTab();sourceAvailable=true;}catch{sourceAvailable=false;}
     const [result]=await chrome.scripting.executeScript({target:{tabId:sourceContext.tabId},func:()=>globalThis.NovelSiteUnit?.collectionStatus()||null});
-    const state=result.result;
-    if(!state){busy=false;await archiveUI?.update({running:false,waiting:false,complete:false});buttons();$('stop').disabled=true;$('gauge').value=0;return;}
-    if(state.ownerId&&state.ownerId!==sourceContext.ownerId){$('stop').disabled=true;$('progressText').textContent='別アカウントの取得状況が残っています。取得元のログイン状態を確認してください。';$('gauge').hidden=true;return;}
-    busy=state.running||state.waiting;await archiveUI?.update(state);buttons();$('stop').disabled=!busy;
+    const state=result.result;connectionLost=false;
+    if(!state){const interrupted=busy&&!starting;busy=acquisitionActive(state,busy,starting);if(busy){buttons();return;}await archiveUI?.update({running:false,waiting:false,complete:false});buttons();$('stop').disabled=true;if(interrupted){void recordDiagnostic('ui_error',new Error('取得元の状態が消えました。'),'source');$('progressText').textContent='取得元のページが再読み込みされたか、取得状態が失われました。保存済み分を確認し、「取得再開」を押してください。';renderGauge({phase:'warning'});}else renderGauge();return;}
+    if(state.ownerId&&state.ownerId!==sourceContext.ownerId){$('stop').disabled=true;$('progressText').textContent='別アカウントの取得状況が残っています。取得元のログイン状態を確認してください。';renderGauge({phase:'error'});return;}
+    busy=acquisitionActive(state,busy,starting);await archiveUI?.update(state);buttons();$('stop').disabled=!busy;
     const seconds=Math.max(0,Math.ceil((state.resumeAt-Date.now())/1000));
-    const text=archiveUI?.viewComplete&&!busy?'ZIP読込済み ｜ 下の欄で作品ごとの内容を確認できます。':state.waiting?'休憩中 ｜ 自動再開まで '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0'):state.running?(state.message||'取得中です。'):state.phase==='error'||state.phase==='paused'?state.message:state.inventoryOnly&&state.complete?'作品一覧を読み込みました。保存対象を選んでください。':coverageState?.allComplete?'取得完了 ｜ JSON・テキストをファイルへ保存してください。':state.message||'開始を待っています。';
+    const text=state.waiting?'休憩中 ｜ 自動再開まで '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0'):state.running?(state.message||'取得中です。'):state.phase==='error'||state.phase==='paused'?state.message:state.inventoryOnly&&state.complete?'作品一覧を読み込みました。保存対象を選んでください。':coverageState?.allComplete?'取得完了 ｜ JSON・テキストをファイルへ保存してください。':state.message||'開始を待っています。';
     $('progressText').textContent=text;$('progressText').title=text;
-    $('gauge').hidden=false;$('gauge').className=busy?'running':archiveUI?.viewComplete?'complete':state.phase==='error'||state.phase==='paused'?'partial':coverageState?.allComplete?'complete':'partial';
-    if(state.running)$('gauge').removeAttribute('value');else $('gauge').value=state.waiting?0.5:1;
-  }catch{
-    busy=false;await archiveUI?.update({running:false,waiting:false,complete:false});buttons();$('stop').disabled=true;$('gauge').className='partial';$('gauge').value=1;
+    renderGauge(state);
+  }catch(value){
+    if(!connectionLost){connectionLost=true;void recordDiagnostic('ui_error',new Error('取得元のタブに接続できません。'),'source');}
+    busy=false;await archiveUI?.update({running:false,waiting:false,complete:false});buttons();$('stop').disabled=true;renderGauge({phase:'warning'});
     $('progressText').textContent='取得元のタブに接続できません。途中までの原稿は下の保存一覧から書き出せます。';
   }finally{polling=false;}
 }
@@ -135,7 +155,7 @@ $('rememberFormat').onclick=async()=>{
   }catch(value){error(value);}
 };
 async function bulk(resume=false,reacquire=false,inventoryOnly=false,archive=false) {
-  busy=true;buttons();
+  starting=true;busy=true;buttons();
   try {
     const tab=await sourceTab();
     if(!backupEntryUrl(tab?.url)) throw new Error('ログイン済みのユーザーホーム、または作品一覧を開いてください。');
@@ -152,7 +172,7 @@ async function bulk(resume=false,reacquire=false,inventoryOnly=false,archive=fal
     if(!result.result?.ok) throw new Error('取得を開始できませんでした。');
     $('status').textContent='取得を開始しました。この画面に進捗を表示します。';
     return true;
-  } catch(value){error(value);busy=false;buttons();return false;}
+  } catch(value){error(value);busy=false;buttons();return false;}finally{starting=false;buttons();}
 }
 async function continueBackup(){await refreshCoverage();if(coverageState?.current?.options?.archive&&coverageState.pending&&!archiveUI?.locked){error(new Error('途中保存のZIPを下の欄へ読み込んでから「取得再開」を押してください。'));return;}await bulk(!!coverageState?.pending);}
 $('bulk').onclick=continueBackup;
@@ -160,7 +180,7 @@ $('resume').onclick=()=>archiveUI?.locked?archiveUI.resume():archiveUI?.canResum
 $('fresh').onclick=()=>bulk(false,true);
 $('inventory').onclick=()=>bulk(false,false,true);
 for(const id of ['allWorks','selectedMode','selectedWorks','includeBody','includeSettings','includeOther'])$(id).onchange=refreshCoverage;
-function error(value) { $('status').textContent = value?.message || String(value); }
+function error(value) { void recordDiagnostic('ui_error',value); $('status').textContent = value?.message || String(value); renderGauge({phase:'error'}); }
 $('read').onclick = async () => {
   $('start').disabled = true;
   $('fields').replaceChildren();
@@ -211,3 +231,5 @@ $('cancelReset').onclick=()=>$('resetDialog').close();
 $('confirmReset').onclick=async()=>{if(busy||archiveUI?.locked||libraryWriting)return;const button=$('confirmReset');button.disabled=true;try{const reply=await chrome.runtime.sendMessage({type:'resetData'});if(!reply?.ok)throw new Error(reply?.error||'削除できませんでした。');await refreshLibrary();await refreshCoverage();$('status').textContent='Chrome内の取得データを削除しました。保存済みファイルは残っています。';$('resetDialog').close();}catch(value){error(value);}finally{button.disabled=false;}};
 $('library').onclick = () => document.getElementById('saved').scrollIntoView({behavior:'smooth'});
 
+
+setupReportUI();

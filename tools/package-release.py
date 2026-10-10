@@ -2,10 +2,13 @@
 from pathlib import Path
 import json
 import zipfile
+import sys
 
 root = Path(__file__).resolve().parents[1]
 version = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))['version']
 target = root.parent / ('simple-narou-backup-v' + version + '.zip')
+if len(sys.argv) > 1:
+    target = Path(sys.argv[1]).resolve()
 excluded = {'.git', 'work', 'test-data', 'node_modules', '__pycache__'}
 with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
     for file in sorted(root.rglob('*')):

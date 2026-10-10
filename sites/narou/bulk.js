@@ -1,5 +1,5 @@
 (() => {
-  const version='0.6.3';
+  const version='1.1.0-diagnostics';
   if(globalThis.narouBulkBackup?.version===version)return;
   if(globalThis.narouBulkBackup?.getStatus?.().running||globalThis.narouBulkBackup?.getStatus?.().waiting)throw new Error('旧版の取得が動いています。一時停止してから再開してください。');
   const P = globalThis.NarouParser;
@@ -15,6 +15,21 @@
   let resumeTimer;
   let resumeAt=null;
   let phase='idle';
+  let diagnosticTask={stage:'unknown'},lastDiagnosticCode='UNKNOWN';
+  function diagnose(kind,code='NONE',extra={}){
+    if(!ownerId)return;
+    chrome.runtime.sendMessage({type:'diagnosticEvent',siteId:'narou',ownerId,event:{kind,code,...diagnosticTask,...extra}}).catch(()=>{});
+  }
+  function issueCode(value){const s=String(value?.message||value||'');return /時間超過/.test(s)?'TIMEOUT':/HTTP/.test(s)?'HTTP':/ログイン|ユーザー.*変わ|再ログイン/.test(s)?'LOGIN':/件数不一致/.test(s)?'COUNT':/200ページ/.test(s)?'SCAN_LIMIT':/保存/.test(s)?'SAVE':/形式|認識|入力欄|本文欄|リンク|テンプレート欄/.test(s)?'FORMAT':/fetch|network|通信/i.test(s)?'NETWORK':'UNKNOWN';}
+  function taskFor(url){
+    const u=new URL(url),path=u.pathname;
+    const stage=path==='/usernovel/list/'?'inventory':path==='/usernovel/draftlist/'?'draft_inventory':path.includes('usernoveldatamanage')||path.includes('draftepisode')?'episode':/receptionsupdateinput|(?:usernovelmanage|draftnovelmanage)\/updateinput/.test(path)?'settings':path.includes('novelchapter')?'chapter':path.includes('novelinitialsetting')?'template':path.includes('favnovel')?'bookmarks':path.includes('favuser')?'users':path.includes('userblogmanage')?'blog':path.includes('userblog')?'blogs':'work';
+    const result={stage,requestNumber:requests+1},page=Number(u.searchParams.get('p')||u.searchParams.get('page')||1);if(Number.isSafeInteger(page)&&page>0)result.listPage=page;
+    let workId=path.match(/\/ncode\/(\d+)\//)?.[1];
+    for(const [id,plan] of Object.entries(currentReport?.episodePlans||{})){const index=plan.findIndex(e=>e.url===url);if(index>=0){workId=id;result.episodeNumber=index+1;break;}}
+    const index=currentReport?.workPlan?.findIndex(w=>String(w.id)===workId);if(index>=0)result.workNumber=index+1;
+    return result;
+  }
   const root = 'https://syosetu.com';
   const sourcePaths = ['/usernovel/list/','/usernovel/draftlist/','/favnovelmain/list/','/favuser/list/','/userblog/list/','/novelinitialsetting/updateinput/'];
   function readable(url) {
@@ -23,7 +38,7 @@
       /^\/(?:usernoveldatamanage|draftepisode)\/(?:top|updateinput)\/ncode\/\d+\/(?:noveldataid|draftepisodeid|episodeid)\/\d+\/$/.test(path) ||
       /^\/draftepisode\/updateinput\/draftepisodeid\/\d+\/$/.test(path) || /^\/novelchapter\/list\/ncode\/\d+\/$/.test(path) || /^\/userblogmanage\/updateinput\/blogkey\/\d+\/$/.test(path);
   }
-  function badge(state){phase=state;chrome.runtime.sendMessage({type:'backupStatus',siteId:'narou',ownerId,state,message:status?.textContent||''}).catch(()=>{});}
+  function badge(state){if(phase!==state){if(state==='waiting')diagnose('waiting');else if(state==='paused')diagnose('paused');else if(state==='error')diagnose('stopped',lastDiagnosticCode);else if(state==='complete'||state==='ready')diagnose('complete');}phase=state;chrome.runtime.sendMessage({type:'backupStatus',siteId:'narou',ownerId,state,message:status?.textContent||''}).catch(()=>{});}
   function update(value) { status.textContent = value; if(running&&!resumeAt)badge('running'); }
   async function page(url) {
     if (!P.safeUrl(url,root) || !readable(url)) throw new Error('取得対象外のURLです。');
@@ -33,14 +48,14 @@
     if (wait) await new Promise(resolve=>setTimeout(resolve,wait));
     if (controller.signal.aborted) throw new Error('停止しました');
     if (requests >= limits.maxPages) throw new Error('この回の取得ページ上限に達しました。続きは後日再開できます。');
-    requests++;
+    diagnosticTask=taskFor(url);requests++;
     lastRequest = Date.now();
     const timeout = setTimeout(()=>controller.abort('通信時間超過'),30000);
     let response;
     try { response = await fetch(url,{credentials:'same-origin',signal:controller.signal,redirect:'follow',cache:'no-store'}); }
-    catch(error){controller.abort(error.message);throw error;}
+    catch(error){if(controller.signal.reason!=='利用者による停止'){lastDiagnosticCode=controller.signal.reason==='通信時間超過'?'TIMEOUT':'NETWORK';diagnose('request_error',lastDiagnosticCode);}controller.abort(error.message);throw error;}
     finally { clearTimeout(timeout); }
-    function fail(message){controller.abort(message);throw new Error(message);}
+    function fail(message){lastDiagnosticCode=issueCode(message);diagnose('request_error',lastDiagnosticCode,{http:response.status});controller.abort(message);throw new Error(message);}
     if (!response.ok) fail('取得エラー HTTP '+response.status);
     if (!P.safeUrl(response.url,root) || !readable(response.url)) fail('ログイン期限切れ、または別画面へ移動しました。');
     const doc = new DOMParser().parseFromString(await response.text(),'text/html');
@@ -54,7 +69,7 @@
     while(queue.length) {
       const current=queue.shift();
       if(seen.has(current)) continue;
-      if(seen.size>=200) throw new Error('一覧が200ページを超えました。');
+      if(seen.size>=200){lastDiagnosticCode='SCAN_LIMIT';diagnose('check_error','SCAN_LIMIT',{pages:seen.size});throw new Error('一覧が200ページを超えました。');}
       seen.add(current);
       if(currentReport.scans[current]) {
         queue.push(...currentReport.scans[current]);
@@ -69,6 +84,7 @@
         if(new URL(next).pathname===new URL(url).pathname && !seen.has(next)) queue.push(next);
       }
     }
+    diagnose('scan','NONE',{...taskFor(url),pages:seen.size});
   }
   function mount(options) {
     panel?.remove();
@@ -111,7 +127,7 @@
       if(options.autoContinue!==undefined)saved.options.autoContinue=options.autoContinue;
     }
     limits={maxPages:Math.max(5,Math.min(100,Number(options.maxPages)||30)),waitSeconds:Math.max(3,Math.min(60,Number(options.waitSeconds)||5))};
-    running=true;controller=new AbortController();requests=0;lastRequest=0;mount(options);
+    running=true;controller=new AbortController();requests=0;lastRequest=0;diagnosticTask={stage:'unknown'};lastDiagnosticCode='UNKNOWN';mount(options);diagnose(options.resume?'resumed':'started');
     update('作品一覧と保存対象を確認しています。');
     const effective=saved?.options||options;
     run(effective,saved).then(async()=>{
@@ -121,7 +137,7 @@
         update(limits.maxPages+'ページ分を取得しました。約1分30秒休んで自動再開します。');badge('waiting');
         resumeTimer=setTimeout(()=>{resumeAt=null;start({...effective,resume:true,quiet:options.quiet,maxPages:limits.maxPages,waitSeconds:limits.waitSeconds}).catch(error=>update(error.message));},90000);
       }else badge(currentReport?.complete?(effective.inventoryOnly?'ready':'complete'):controller.signal.reason==='利用者による停止'?'paused':'error');
-    }).catch(error=>{resumeAt=null;update(error.message);badge('error');}).finally(()=>running=false);
+    }).catch(error=>{resumeAt=null;lastDiagnosticCode=issueCode(error);update(error.message);badge('error');}).finally(()=>running=false);
     return {ok:true};
   }
   async function run(options,saved) {
@@ -145,11 +161,12 @@
     function validateInventory(url,check,label) {
       const count=new Set(Object.values(check.pages).flat()).size;
       check.recognized=count;check.validated=check.expected===null||count===check.expected;
+      if(!check.validated){lastDiagnosticCode='COUNT';diagnose('check_error','COUNT',{expected:check.expected,actual:count});}
       if(!check.validated)report.failures.push({item:label,error:'件数不一致（一覧'+check.expected+'／取得'+count+'）'});
     }
     async function save(title,category,url,data,fields) {
       const result=await chrome.runtime.sendMessage({type:'saveSnapshot',snapshot:{siteId:'narou',title,category,runId,ownerId,url,fields:fields?.length?fields:[{label:category,value:JSON.stringify(data,null,2)}],data:{sourceUrl:url,...data}}});
-      if(!result?.ok){controller.abort('端末内への保存失敗');throw new Error(result?.error||'端末内への保存に失敗しました。');}
+      if(!result?.ok){lastDiagnosticCode='SAVE';diagnose('save_error','SAVE');controller.abort('端末内への保存失敗');throw new Error(result?.error||'端末内への保存に失敗しました。');}
       report.pages++;
     }
     async function collection(path,category,extract) {
@@ -165,12 +182,14 @@
         report.collectionCounts[url]=count;
         report.collectionExpected[url]=expected;
       });
+      if(expected!==null&&count!==expected){lastDiagnosticCode='COUNT';diagnose('check_error','COUNT',{expected,actual:count});}
       if(expected!==null && count!==expected) throw new Error(category+'の件数不一致（一覧'+expected+'件／取得'+count+'件）');
       return count;
     }
     async function attempt(label,fn) {
       try { await fn(); }
       catch(error) {
+        if(!/この回の取得ページ上限|停止しました/.test(error.message)){lastDiagnosticCode=issueCode(error)==='UNKNOWN'?lastDiagnosticCode:issueCode(error);diagnose('check_error',lastDiagnosticCode);}
         report.failures.push({item:label,error:error.message});
         if(controller.signal.aborted || /上限|ログイン|保存できません|HTTP/.test(error.message)) throw error;
       }
@@ -250,6 +269,7 @@
             if(count&&expectedDraft!==0) await episodeList(count.url,'下書き');
             for(const [expected,state] of [[expectedPublished,'投稿済み'],[expectedDraft,'下書き']]) {
               const actual=[...episodes.values()].filter(item=>item.state===state).length;
+              if(Number.isFinite(expected)&&actual!==expected){lastDiagnosticCode='COUNT';diagnose('check_error','COUNT',{expected,actual});}
               if(Number.isFinite(expected)&&actual!==expected) report.failures.push({item:work.title,error:state+'エピソードの件数不一致（一覧'+expected+'／取得'+actual+'）'});
             }
             if(!episodes.size && (!Number.isFinite(expectedPublished)||expectedPublished>0||expectedDraft>0)) throw new Error('エピソード編集リンクが見つかりません。');
@@ -326,7 +346,7 @@
         });
       }
       report.complete=report.failures.length===0&&Object.values(report.inventoryChecks).every(check=>check.validated);
-    } catch(error) {report.failures.push({item:'一括取得',error:error.message});}
+    } catch(error) {if(!/この回の取得ページ上限|停止しました/.test(error.message)){lastDiagnosticCode=issueCode(error)==='UNKNOWN'?lastDiagnosticCode:issueCode(error);diagnose('check_error',lastDiagnosticCode);}report.failures.push({item:'一括取得',error:error.message});}
     report.finishedAt=new Date().toISOString();
     report.lastRequestCount=requests;
     try {

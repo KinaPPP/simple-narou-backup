@@ -1,3 +1,4 @@
+import {recordDiagnostic} from './diagnostic-client.mjs';
 import {saveOfflineViewer} from './offline-viewer-save.mjs';
 import {ArchiveSet} from './archive-set.mjs';
 import {writableDirectory,backupName,reserveBase} from './save-directory.mjs';
@@ -5,12 +6,12 @@ import {downloadSettings} from './download-settings.mjs';
 import {loadBackup,currentArchive} from './library.js';
 export function setupArchiveUI({sourceTab,start,refreshCoverage,buttons,viewingArchive=()=>true}){
  const $=id=>document.getElementById(id);let sink=null,locked=false,paused=false,finishing=false,hasStarted=false,writing=Promise.resolve();
- const ui={get locked(){return locked;},get paused(){return paused;},get viewComplete(){return viewingArchive()&&!!currentArchive?.manifest.complete;},get canResume(){return viewingArchive()&&!!currentArchive?.manifest.checkpoint&&!currentArchive.manifest.complete&&!currentArchive.missing.length&&!currentArchive.missingParts?.length&&!currentArchive.integrityErrors?.size;},resume, resumeImported,update};
+ const ui={get progressManifest(){return sink?.manifest||(viewingArchive()&&currentArchive?{...currentArchive.manifest,integrityErrors:currentArchive.integrityErrors,missing:currentArchive.missing,missingParts:currentArchive.missingParts}:null);},get locked(){return locked;},get paused(){return paused;},get viewComplete(){return viewingArchive()&&!!currentArchive?.manifest.complete;},get canResume(){return viewingArchive()&&!!currentArchive?.manifest.checkpoint&&!currentArchive.manifest.complete&&!currentArchive.missing.length&&!currentArchive.missingParts?.length&&!currentArchive.integrityErrors?.size;},resume, resumeImported,update};
  async function context(){await sourceTab();const {sourceContext}=await chrome.storage.session.get('sourceContext');return sourceContext;}
  async function message(value){const reply=await chrome.runtime.sendMessage(value);if(!reply?.ok)throw new Error(reply?.error||'保存操作を開始できません。');}
  async function prepare(){const c=await context();const directory=await writableDirectory();await context();const limit=Number($('splitMode').value)||0;const base=await reserveBase(directory,backupName(c.ownerId),true);const settings=await downloadSettings(),viewerName=await saveOfflineViewer(directory,settings);return {c,directory,base,limit,settings,viewerName};}
  async function bind(c){await message({type:'bindArchive',siteId:c.siteId,ownerId:c.ownerId,backupId:sink.manifest.backupId});await chrome.storage.session.remove('archiveInterrupted');}
- function notice(error){$('status').textContent=error.name==='AbortError'?'保存先の選択をキャンセルしました。':error.message;}
+ function notice(error){void recordDiagnostic('save_error',error,'save');$('status').textContent=error.name==='AbortError'?'保存先の選択をキャンセルしました。':error.message;}
  $('quick').onclick=async()=>{if(locked)return;let handle;try{
    // Validate the source before selecting a folder or creating any file.
    hasStarted=false;locked=true;buttons();const {c,directory,base,limit,settings}=await prepare();sink=new ArchiveSet(directory,base,c,settings,{limit,separateOther:true});const local=await chrome.storage.local.get(null);sink.manifest.downloadPreferences=Object.entries(local).filter(([key,value])=>key.startsWith('download-preference:')&&value.ownerId===c.ownerId).map(([,value])=>value);sink.manifest.blogAssociations=Object.fromEntries(Object.entries(local['blog-associations']||{}).filter(([key])=>key.startsWith(c.ownerId+'|')));await sink.init();await bind(c);locked=true;paused=false;
@@ -34,7 +35,7 @@ export function setupArchiveUI({sourceTab,start,refreshCoverage,buttons,viewingA
    const task=writing.then(async()=>{if(value.record)await sink.add(value.record);else if(value.report)await sink.checkpoint(value.report);else throw new Error('ZIP保存情報が不正です。');});writing=task.catch(()=>{});
    task.then(()=>reply({ok:true})).catch(error=>{paused=true;notice(error);reply({ok:false,error:error.message});});return true;
  });
- async function update(state){if(!sink||!hasStarted){if(currentArchive&&viewingArchive()){$('coverageTitle').textContent=currentArchive.integrityErrors?.size?'ZIPに読み取れないデータがあります':currentArchive.manifest.complete?'ZIPからバックアップデータを読み込みました':'途中保存のZIPを読み込みました';$('coverageCount').textContent='ZIP内 '+currentArchive.manifest.records.length+'件 ／ 作品 '+currentArchive.manifest.works.length+'件'+(currentArchive.missingParts?.length?' ／ 分割不足 '+currentArchive.missingParts.map(n=>String(n).padStart(3,'0')).join(', '):'');$('coverageNext').textContent=currentArchive.integrityErrors?.size?'破損の警告を確認してください。このZIPからの取得再開はできません。元のZIPを読み込み直すか、作品を再取得してください。':currentArchive.manifest.complete?'下の欄で内容を確認・コピーできます。表示した項目から破損を確認します。未表示の項目は未検証です。':ui.canResume?'「取得再開」で新しいZIPへ保存済み分をコピーして続けます。':currentArchive.missingParts?.length?'不足する分割ZIPもまとめて読み込むか、作品を個別に再取得してください。':'収録済みの内容を確認・コピーできます。';}return;}
+ async function update(state){if(!sink||!hasStarted)return;
    paused=!state.running&&!state.waiting&&!state.complete;
    $('pace').disabled=locked;
    const m=sink.manifest,cp=m.checkpoint,done=cp?.doneWorks?.length||0,total=cp?.workPlan?.length||m.works.length;
@@ -48,6 +49,6 @@ export function setupArchiveUI({sourceTab,start,refreshCoverage,buttons,viewingA
  $('pace').onchange=()=>{$('waitSeconds').value=$('pace').value;};
  chrome.storage.session.get(['archiveInterrupted','archiveSink']).then(async data=>{if(data.archiveInterrupted||data.archiveSink){if(data.archiveSink)await message({type:'abandonArchive'});$('status').textContent='前回のZIP取得が中断しました。保存済みZIPを下の欄へ読み込み、「取得再開」を押してください。';}}).catch(notice);
  window.addEventListener('backup-integrity-changed',()=>{if(!locked){update({});buttons();}});
- window.addEventListener('backup-imported',async()=>{await refreshCoverage();if(currentArchive&&!locked){$('status').textContent=currentArchive.integrityErrors?.size?'ZIPに読み取れないデータがあります。下の破損の警告を確認してください。':'ZIPからバックアップデータを読み込みました。下の欄で内容を確認できます。';}if(ui.canResume){$('resume').disabled=false;$('status').textContent='途中のZIPを読み込みました。「取得再開」で新しいZIPへ保存済み分をコピーして続けます。';}});
+ window.addEventListener('backup-imported',async()=>{await refreshCoverage();if(currentArchive&&!locked){$('importStatus').textContent+=' 下の欄で内容を確認できます。';}if(ui.canResume){$('resume').disabled=false;$('importStatus').textContent+=' 途中のZIPを読み込みました。「取得再開」で新しいZIPへ保存済み分をコピーして続けます。';}});
  return ui;
 }

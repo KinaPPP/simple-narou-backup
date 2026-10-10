@@ -1,3 +1,5 @@
+import {errorCode,createDiagnosticStore} from '../diagnostics.mjs';
+import {settingSchema,schemaKey,compareSettingSchema} from '../settings-schema.mjs';
 import {findSite,checkpointKey,legacyCheckpointKey} from '../core.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,7 +36,7 @@ test('対象サイトだけを許可し、原稿・空欄・ID・改行を保持
  assert.throws(()=>validateSnapshot({fields:[{label:'x',value:'x'}]},'https://evil.test/'));
 });
 test('入力欄の抽出でパスワード・CSRF・ボタンを保存しない',async()=>{
- const context=vm.createContext({findSite,checkpointKey,legacyCheckpointKey,URL});
+ const context=vm.createContext({errorCode,createDiagnosticStore,settingSchema,schemaKey,compareSettingSchema,findSite,checkpointKey,legacyCheckpointKey,URL});
  vm.runInContext(await readFile(new URL('sites/narou/parser.js',base),'utf8'),context);
  const node=(name,type,value,extra={})=>({name,type,value,tagName:type==='textarea'?'TEXTAREA':'INPUT',labels:[],disabled:false,...extra});
  const controls=context.NarouParser.form({querySelectorAll:()=>[
@@ -48,7 +50,7 @@ test('入力欄の抽出でパスワード・CSRF・ボタンを保存しない'
 async function worker(){
  const storage={};let listener;
  const chrome={action:{onClicked:{addListener:()=>{}}},runtime:{id:'test',onMessage:{addListener:fn=>listener=fn}},storage:{session:{get:async()=>({})},local:{setAccessLevel:async()=>{},set:async values=>{Object.assign(storage,structuredClone(values));},get:async key=>key?{[key]:storage[key]}:storage}},storageSessionUnused:0,tabs:{onRemoved:{addListener:()=>{}},create:async()=>{}}};
- const context=vm.createContext({findSite,checkpointKey,legacyCheckpointKey,chrome,crypto:webcrypto,validateSnapshot,Date});
+ const context=vm.createContext({errorCode,createDiagnosticStore,settingSchema,schemaKey,compareSettingSchema,findSite,checkpointKey,legacyCheckpointKey,chrome,crypto:webcrypto,validateSnapshot,Date});
  vm.runInContext((await readFile(new URL('background.js',base),'utf8')).replace(/^import[^\n]+\n/gm,''),context);
  const send=(message,sender={id:'test',frameId:0,url:'https://syosetu.com/usernovel/list/',tab:{id:1}})=>new Promise(resolve=>listener(message,sender,resolve));
  return {storage,chrome,send};
@@ -84,7 +86,7 @@ test('取得ページ数で分割し、再開時に取得済み本文を読み�
    form:doc=>doc.kind==='episode'?[{name:'novel',label:'本文',value:'本文'+doc.index},{name:'subtitle',label:'タイトル',value:'第'+doc.index+'話'}]:doc.kind==='template'?[{name:'preface1',label:'前書き',value:''}]:[{name:'title',label:'作品タイトル',value:'試験作品'}],
    formFields:controls=>controls.map(c=>({label:c.label,value:c.value}))
  };
- const context=vm.createContext({findSite,checkpointKey,legacyCheckpointKey,document,NarouParser:parser,location:{href:origin+'/user/top/?ref=header',pathname:'/user/top/'},chrome:{runtime:{sendMessage:send}},crypto:webcrypto,URL,AbortController,Date,Math,
+ const context=vm.createContext({errorCode,createDiagnosticStore,settingSchema,schemaKey,compareSettingSchema,findSite,checkpointKey,legacyCheckpointKey,document,NarouParser:parser,location:{href:origin+'/user/top/?ref=header',pathname:'/user/top/'},chrome:{runtime:{sendMessage:send}},crypto:webcrypto,URL,AbortController,Date,Math,
   setTimeout:(fn,delay)=>{if(delay<30000)fn();return 1;},clearTimeout:()=>{},
   fetch:async(url)=>{requests.push(url);return {ok:true,url,text:async()=>url};},
   DOMParser:class {parseFromString(url){if(!docs[url])throw new Error('Unknown fixture '+url);return docs[url];}}

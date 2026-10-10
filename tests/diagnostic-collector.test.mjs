@@ -1,0 +1,13 @@
+import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFile} from 'node:fs/promises';import {webcrypto} from 'node:crypto';
+import {reportText} from '../diagnostics.mjs';
+test('three-page inventory errors retain safe task details across a manual resume and reach page three',async()=>{
+ const root='https://syosetu.com',events=[],requests=[],saved=[];let cp,broken=true;
+ const parse=url=>({url,querySelector:s=>s==='.l-container'?{}:null,querySelectorAll:()=>[]});
+ const parser={ownerId:()=> '123',safeUrl:(u,b)=>new URL(u,b||root).href,main:d=>d.url.includes('draftlist')?'全0件':'全3件中',pages:(d,u)=>u.includes('draftlist')?[]:Number(new URL(u).searchParams.get('p')||1)<3?[root+'/usernovel/list/?p='+(Number(new URL(u).searchParams.get('p')||1)+1)]:[],list:(d,u)=>u.includes('draftlist')?[]:[{id:String(new URL(u).searchParams.get('p')||1),title:'PRIVATE TITLE',url:root+'/usernovelmanage/top/ncode/SECRET/'}],links:()=>[]};
+ const ctx=vm.createContext({document:{},NarouParser:parser,location:{href:root+'/user/top/',pathname:'/user/top/'},URL,crypto:webcrypto,Date,Math,AbortController,setTimeout:(fn,ms)=>{if(ms<30000)fn();return 1;},clearTimeout(){},fetch:async url=>{requests.push(url);return {ok:!(broken&&url.endsWith('?p=2')),status:broken&&url.endsWith('?p=2')?503:200,url,text:async()=>url};},DOMParser:class{parseFromString(url){return parse(url);}},chrome:{runtime:{sendMessage:async m=>{if(m.type==='diagnosticEvent')events.push(structuredClone(m.event));if(m.type==='checkpoint')cp=structuredClone(m.report);if(m.type==='saveSnapshot')saved.push(m.snapshot);return {ok:true,checkpoint:cp};}}}});
+ vm.runInContext(await readFile(new URL('../sites/narou/bulk.js',import.meta.url),'utf8'),ctx);
+ async function run(resume){await ctx.narouBulkBackup.start({quiet:true,inventoryOnly:true,works:false,resume,maxPages:30,waitSeconds:3});for(let i=0;i<100;i++){await new Promise(r=>setImmediate(r));if(!ctx.narouBulkBackup.getStatus().running)return;}throw new Error('not finished');}
+ await run(false);assert.equal(cp.complete,false);const failure=events.find(e=>e.kind==='request_error');assert.equal(failure.http,503);assert.equal(failure.listPage,2);assert.equal(failure.stage,'inventory');assert.ok(events.some(e=>e.kind==='stopped'));
+ broken=false;await run(true);assert.equal(cp.complete,true);assert.equal(cp.workPlan.length,3);assert.ok(requests.includes(root+'/usernovel/list/?p=3'));assert.ok(events.some(e=>e.kind==='resumed'));assert.ok(events.some(e=>e.kind==='scan'&&e.pages===3));assert.ok(events.some(e=>e.kind==='complete'));
+ assert.doesNotMatch(JSON.stringify(events),/PRIVATE|SECRET|https|ownerId/);assert.doesNotMatch(reportText({version:'1.1.0',events}),/PRIVATE|SECRET|https/);
+});

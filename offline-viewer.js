@@ -1,3 +1,5 @@
+import {setupImportStatus} from './import-status.mjs';
+import {selectImportFiles,ignoredFilesNote} from './import-files.mjs';
 import {openArchives} from './archive-set.mjs';
 import {openMergedArchives} from './merged-archives.mjs';
 import {validRecord,recordIndex} from './archive.mjs';
@@ -29,7 +31,7 @@ async function draw(key='',page=0){
  const loaded=[inventory(m)];for(const e of entries){try{loaded.push(normalize(await a.record(e)));}catch{}}
  if(token!==generation)return;
  $('records').dataset.activeKey=key;NarouOrganized.render(loaded,$('records'),{preferences:m.downloadPreferences||[],associations,onAssociation:value=>associations=value,onSelect:draw});
- if(h&&h.pages>1){const nav=document.createElement('div');nav.className='toolbar';nav.setAttribute('aria-label','取得履歴のページ');const newer=document.createElement('button'),older=document.createElement('button'),label=document.createElement('span');newer.textContent='新しい履歴';older.textContent='古い履歴';newer.className=older.className='secondary';newer.disabled=h.page===0;older.disabled=h.page===h.pages-1;newer.onclick=()=>draw('取得履歴',h.page-1);older.onclick=()=>draw('取得履歴',h.page+1);label.textContent=(h.page+1)+' / '+h.pages+'ページ（1ページ100件）';nav.append(newer,label,older);$('records').prepend(nav);}
+ if(h)globalThis.NarouOrganized.historyPager($('records'),h,page=>draw('取得履歴',page));
  status();
 }
 async function chooseGroup(){const group=groups[Number($('backup').value)];if(!group)return;archive=await (group.merged?openMergedArchives:openArchives)(group.files);json=null;associations=structuredClone(archive.manifest.blogAssociations||{});delete $('records').dataset.owner;await draw();}
@@ -40,19 +42,20 @@ async function load(files){
  if(reading){const batch=Array.from(files);if(pending.reduce((n,b)=>n+b.length,0)+batch.length<=1000)pending.push(batch);else $('warning').textContent='追加待ちのZIPが多すぎます。読み込みが終わってから追加してください。';return;}reading=true;for(const id of ['file','backup','folder','clear'])$(id).disabled=true;
  try{
   files=Array.from(files);if(!files.length)throw new Error('ZIPまたはJSONを選んでください。');if(files.length>1000)throw new Error('一度に読み込めるファイルは1000個までです。');
-  const zips=files.filter(f=>f.name.toLowerCase().endsWith('.zip'));
+  const selected=selectImportFiles(files);files=selected.files;const zips=files.filter(f=>f.name.toLowerCase().endsWith('.zip'));
   if(zips.length){
    const result=await held.add(zips);if(!result.entries.length)throw new Error(result.warnings.join(' ／ '));
    const map=new Map();for(const entry of result.entries){const m=entry.manifest,key=m.siteId+'|'+m.ownerId+'|'+m.backupId;let group=map.get(key);if(!group){group={files:[],date:m.createdAt||'',owner:m.ownerId,site:m.siteId};map.set(key,group);}group.files.push(entry.file);}
    const individual=[...map.values()].sort((a,b)=>b.date.localeCompare(a.date)),accounts=new Map();for(const g of individual){const k=g.site+'|'+g.owner;if(!accounts.has(k))accounts.set(k,{files:[],date:g.date,owner:g.owner,site:g.site,merged:true,sets:0});const account=accounts.get(k);account.files.push(...g.files);account.sets++;}
    groups=[...[...accounts.values()].filter(g=>g.sets>1),...individual];$('backup').replaceChildren();
    groups.forEach((g,i)=>{const option=document.createElement('option');option.value=String(i);option.textContent='ID:'+g.owner+' ／ '+(g.merged?'全バックアップを合成（'+g.sets+'組）':backupDate(g.date))+' ／ ZIP '+g.files.length+'個';$('backup').append(option);});
-   await chooseGroup();$('importStatus').textContent='ZIP '+held.entries.size+'個を保持中。追加 '+result.added+'個'+(result.duplicates?' ／ 重複 '+result.duplicates+'個は追加しませんでした。':'。')+' 後から不足ZIPを追加できます。「表示するバックアップ」で合成表示・保存操作ごとの表示を切り替えます。';
+   await chooseGroup();$('importStatus').textContent='ZIP '+held.entries.size+'個を保持中。追加 '+result.added+'個'+(result.duplicates?' ／ 重複 '+result.duplicates+'個は追加しませんでした。':'。')+' 不足分は後から追加できます。';
   }else{
    if(files.length!==1||!files[0].name.toLowerCase().endsWith('.json'))throw new Error('ZIP、またはJSONを1つ選んでください。');
    if(held.entries.size)throw new Error('ZIPを保持しています。JSONに切り替える場合は「読み込みをクリア」してください。');
    const file=files[0];if(file.size>60*1024*1024)throw new Error('JSONは60MBまでです。大量データはZIPをご利用ください。');const data=JSON.parse((await file.text()).replace(/^\uFEFF/,''));if(!(data.format==='narou-local-backup'&&data.version===1||data.format==='novel-site-backup'&&data.version===2)||!Array.isArray(data.records)||!data.records.every(validRecord)||data.records.some(r=>!getSite(r.siteId||'narou')))throw new Error('このツールで保存したJSONを選んでください。');archive=null;json=data;associations=structuredClone(data.blogAssociations||{});delete $('records').dataset.owner;await draw();$('status').textContent='JSON内 '+data.records.length+'件';$('warning').textContent='';$('importStatus').textContent=file.name+' を読み込みました。';
   }
+  if(selected.ignored)$('importStatus').textContent+=' ／ '+ignoredFilesNote(selected.ignored);
  }catch(error){$('warning').textContent='読み込みできませんでした：'+error.message+' 読み込み済みのファイルは保持しています。';}
  finally{reading=false;for(const id of ['file','folder','clear'])$(id).disabled=false;$('backup').disabled=!groups.length;$('file').value='';$('folderFile').value='';if(pending.length)void load(pending.shift());}
 }
@@ -63,3 +66,5 @@ $('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('drag');};$(
 $('folder').onclick=async()=>{try{if(!window.showDirectoryPicker){$('folderFile').click();return;}const directory=await window.showDirectoryPicker({mode:'read'}),files=[];for await(const h of directory.values())if(h.kind==='file'&&h.name.toLowerCase().endsWith('.zip'))files.push(await h.getFile());await load(files);}catch(error){if(error.name!=='AbortError')$('warning').textContent='フォルダを読み込めません：'+error.message+' ZIPをドラッグ＆ドロップしてください。';}};
 $('folderFile').onchange=e=>load([...e.target.files].filter(f=>f.name.toLowerCase().endsWith('.zip')&&(!f.webkitRelativePath||f.webkitRelativePath.split('/').length===2)));
 $('top').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
+
+setupImportStatus();
