@@ -1,5 +1,5 @@
 (() => {
-  const version='1.1.0-diagnostics';
+  const version='1.1.1-labels';
   if(globalThis.narouBulkBackup?.version===version)return;
   if(globalThis.narouBulkBackup?.getStatus?.().running||globalThis.narouBulkBackup?.getStatus?.().waiting)throw new Error('旧版の取得が動いています。一時停止してから再開してください。');
   const P = globalThis.NarouParser;
@@ -352,9 +352,9 @@
     try {
       await checkpoint();
       await save('バックアップ結果','取得結果',location.href,report,[{label:'取得結果',value:JSON.stringify(report,null,2)}]);
-      update((report.complete?'今回の対象範囲の取得が終了しました。':'途中まで取得しました。「続きから取得」で再開できます。')+' '+report.pages+(options.archive?'ページをZIPへ保存。詳細ページで保存状況を確認してください。':'ページをChrome内に保存。全体の残りを確認し、JSON・テキストを書き出してください。'));
+      update((report.complete?'今回の対象範囲の取得が終了しました。':'途中まで取得しました。「取得再開」で再開できます。')+' '+report.pages+(options.archive?'ページをZIPへ保存。詳細ページで保存状況を確認してください。':'ページをChrome内に保存。全体の残りを確認し、「ZIPで保存」「JSONで保存」「テキストで保存」で書き出してください。'));
     } catch(error) { report.complete=false;throw new Error('結果の保存に失敗しました。既に保存したページを書き出してください。 '+error.message); }
   }
-  globalThis.narouBulkBackup={version,preview,start,reset:()=>{if(running||resumeAt)throw new Error('取得中です。');clearTimeout(resumeTimer);currentReport=null;ownerId=null;phase='idle';if(status)status.textContent='取得データをリセットしました。';},getStatus:()=>({version,phase,running,waiting:!!resumeAt,resumeAt,inventoryOnly:!!currentReport?.options?.inventoryOnly,message:status?.textContent||'',pages:currentReport?.pages||0,ownerId,complete:currentReport?.complete||false,finishedAt:currentReport?.finishedAt||null}),stop:()=>{clearTimeout(resumeTimer);resumeAt=null;if(currentReport){currentReport.autoResumeAt=null;checkpoint().catch(()=>{});}if(running)controller.abort('利用者による停止');else update('自動再開を停止しました。「続きから取得」で再開できます。');badge('paused');}};
+  globalThis.narouBulkBackup={version,preview,start,reset:()=>{if(running||resumeAt)throw new Error('取得中です。');clearTimeout(resumeTimer);currentReport=null;ownerId=null;phase='idle';if(status)status.textContent='取得データをリセットしました。';},getStatus:()=>({version,phase,running,waiting:!!resumeAt,resumeAt,inventoryOnly:!!currentReport?.options?.inventoryOnly,message:status?.textContent||'',pages:currentReport?.pages||0,ownerId,complete:currentReport?.complete||false,finishedAt:currentReport?.finishedAt||null}),stop:()=>{clearTimeout(resumeTimer);resumeAt=null;if(currentReport){currentReport.autoResumeAt=null;checkpoint().catch(()=>{});}if(running)controller.abort('利用者による停止');else update('自動再開を停止しました。「取得再開」で再開できます。');badge('paused');}};
 })();
 

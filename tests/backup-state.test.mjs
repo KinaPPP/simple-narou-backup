@@ -65,7 +65,7 @@ test('旧版の取得処理は動作中に置き換えず、停止後は新版�
  const old={getStatus:()=>({running:true})};const context=vm.createContext({findSite,checkpointKey,legacyCheckpointKey,narouBulkBackup:old});
  assert.throws(()=>vm.runInContext(script,context),/旧版の取得/);assert.equal(context.narouBulkBackup,old);
  old.getStatus=()=>({running:false});vm.runInContext(script,context);
- assert.equal(context.narouBulkBackup.version,'1.1.0-diagnostics');assert.notEqual(context.narouBulkBackup,old);
+ assert.equal(context.narouBulkBackup.version,'1.1.1-labels');assert.notEqual(context.narouBulkBackup,old);
 });
 
 

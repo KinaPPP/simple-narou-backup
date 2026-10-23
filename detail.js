@@ -79,7 +79,7 @@ async function refreshCoverage(){
   const full=$('allWorks').checked&&$('includeBody').checked&&$('includeSettings').checked&&$('includeOther').checked;
   $('coverageTitle').textContent=coverageState.allComplete?(full?'全体の取得が終了しました':'選択した対象の取得が終了しました'):coverageState.pending?'途中まで取得しています':coverageState.inventoryKnown?'保存する対象を選んでください':'作品一覧を先に読み込みます';
   $('coverageCount').textContent='作品 '+coverageState.completed.length+' / '+coverageState.total+' ｜ 残り '+coverageState.remaining.length+' ｜ お気に入り '+(coverageState.favoritesComplete?'取得済み':'未完了')+' ｜ 活動報告 '+(coverageState.announcementsComplete?'取得済み':'未完了');
-  $('coverageNext').textContent=coverageState.allComplete?'JSON・テキストを書き出し、保存先のファイルを確認してください。':coverageState.pending?'休憩中は自動再開を待てます。一時停止・エラーの後は「続きから取得」を押してください。':'対象を選び「取得を開始」を押してください。「全部保存」または作品を1つ選べます。';
+  $('coverageNext').textContent=coverageState.allComplete?'「ZIPで保存」「JSONで保存」「テキストで保存」で書き出し、保存先のファイルを確認してください。':coverageState.pending?'休憩中は自動再開を待てます。一時停止・エラーの後は「取得再開」を押してください。':'対象を選び「取得開始」を押してください。「全部保存」または作品を1つ選べます。';
   for(const id of ['coverageTitle','coverageCount','coverageNext'])$(id).title=$(id).textContent;
   if(currentArchive&&!inventoryFromSite)await archiveUI?.update({running:false,waiting:false,complete:currentArchive.manifest.complete});
   buttons();renderGauge();
@@ -128,7 +128,7 @@ async function progress(){
     if(state.ownerId&&state.ownerId!==sourceContext.ownerId){$('stop').disabled=true;$('progressText').textContent='別アカウントの取得状況が残っています。取得元のログイン状態を確認してください。';renderGauge({phase:'error'});return;}
     busy=acquisitionActive(state,busy,starting);await archiveUI?.update(state);buttons();$('stop').disabled=!busy;
     const seconds=Math.max(0,Math.ceil((state.resumeAt-Date.now())/1000));
-    const text=state.waiting?'休憩中 ｜ 自動再開まで '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0'):state.running?(state.message||'取得中です。'):state.phase==='error'||state.phase==='paused'?state.message:state.inventoryOnly&&state.complete?'作品一覧を読み込みました。保存対象を選んでください。':coverageState?.allComplete?'取得完了 ｜ JSON・テキストをファイルへ保存してください。':state.message||'開始を待っています。';
+    const text=state.waiting?'休憩中 ｜ 自動再開まで '+String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0'):state.running?(state.message||'取得中です。'):state.phase==='error'||state.phase==='paused'?state.message:state.inventoryOnly&&state.complete?'作品一覧を読み込みました。保存対象を選んでください。':coverageState?.allComplete?'取得完了 ｜ 「ZIPで保存」「JSONで保存」「テキストで保存」でファイルへ保存してください。':state.message||'開始を待っています。';
     $('progressText').textContent=text;$('progressText').title=text;
     renderGauge(state);
   }catch(value){
@@ -166,7 +166,7 @@ async function bulk(resume=false,reacquire=false,inventoryOnly=false,archive=fal
     if(archive){options.allWorks=true;options.selectedWorkIds=undefined;options.includeBody=options.includeSettings=options.favorites=options.announcements=options.works=options.autoContinue=true;options.excludeWorkIds=[];options.maxPages=30;options.waitSeconds=5;}
     // Other information is reread; unchanged saved content is deduplicated.
     if(!resume&&!inventoryOnly&&options.works&&options.selectedWorkIds&&!options.selectedWorkIds.length)throw new Error('保存する作品を選んでください。');
-    if(!resume&&!inventoryOnly&&!options.works&&!options.favorites&&!options.announcements)throw new Error('保存対象を選ぶか「選んだ対象を取得し直す」を押してください。');
+    if(!resume&&!inventoryOnly&&!options.works&&!options.favorites&&!options.announcements)throw new Error('保存対象を選ぶか「再取得」を押してください。');
     await chrome.scripting.executeScript({target:{tabId:tab.id},files:findSite(tab.url).scripts.collect});
     const [result]=await chrome.scripting.executeScript({target:{tabId:tab.id},func:options=>globalThis.NovelSiteUnit.startCollection(options),args:[options]});
     if(!result.result?.ok) throw new Error('取得を開始できませんでした。');

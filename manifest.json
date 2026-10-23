@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "シンプルになろう（バックアップ）",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minimum_chrome_version": "109",
   "description": "「小説家になろう」の自作品・下書き・設定などをローカルへ保存する非公式のバックアップ拡張機能です。",
   "permissions": [
