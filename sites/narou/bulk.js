@@ -1,5 +1,5 @@
 (() => {
-  const version='1.1.1-labels';
+  const version='1.1.2-settings';
   if(globalThis.narouBulkBackup?.version===version)return;
   if(globalThis.narouBulkBackup?.getStatus?.().running||globalThis.narouBulkBackup?.getStatus?.().waiting)throw new Error('旧版の取得が動いています。一時停止してから再開してください。');
   const P = globalThis.NarouParser;
@@ -102,6 +102,15 @@
     const library=document.createElement('button'); library.textContent='保存結果を開く';
     library.onclick=()=>chrome.runtime.sendMessage({type:'openLibrary'});
     section.append(heading,status,stop,library); shadow.append(style,section);document.documentElement.append(panel);
+  }
+  // Only known aliases of the same work and query are interchangeable.
+  // Reception settings and unknown/query-specific routes remain separate.
+  function settingUrls(links,workId) {
+    const urls=[...new Set(links.map(item=>item.url).filter(value=>{
+      try {const u=new URL(value);const m=u.pathname.match(/^\/(?:usernovelmanage|draftnovelmanage)\/(?:updateinput|receptionsupdateinput)\/ncode\/(\d+)\/$/);return u.origin===root&&m&&m[1]===String(workId);}catch{return false;}
+    }))];
+    const available=new Set(urls);
+    return urls.filter(url=>!new URL(url).pathname.startsWith('/draftnovelmanage/updateinput/')||!available.has(url.replace('/draftnovelmanage/updateinput/','/usernovelmanage/updateinput/')));
   }
   function preview() {
     return {works:P.list(document,location.href),isEntry:['/user/top/','/usernovel/list/','/usernovel/draftlist/'].includes(location.pathname)};
@@ -241,14 +250,13 @@
             report.works=report.works.filter(item=>item.id!==work.id);report.works.push(result);
             await save(work.title,'作品情報',work.url,result,[{label:'投稿状態',value:work.publication},...metadata]);
             if(options.includeSettings!==false){
-            const settings=links.filter(item=>/\/(?:usernovelmanage|draftnovelmanage)\/(?:updateinput|receptionsupdateinput)\//.test(item.url));
-            const uniqueSettings=[...new Set(settings.map(item=>item.url))];
+            const uniqueSettings=settingUrls(links,work.id);
             if(!uniqueSettings.length) report.failures.push({item:work.title,error:'作品設定へのリンクが見つかりません'});
             for(const url of uniqueSettings) {
               if(report.donePages.includes(url)) continue;
               await attempt(work.title+'の設定',async()=>{
                 const doc=await page(url);const controls=P.form(doc);
-                if(!controls.length) throw new Error('作品設定の入力欄を取得できません。');
+                if(!controls.length||(!url.includes('/receptionsupdateinput/')&&!controls.some(control=>control.name==='title'))) throw new Error('作品設定の入力欄を取得できません。');
                 await save(work.title,'作品設定',url,{workId:work.id,controls},P.formFields(controls));
                 report.donePages.push(url);await checkpoint();
               });

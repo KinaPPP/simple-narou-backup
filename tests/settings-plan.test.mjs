@@ -1,0 +1,21 @@
+import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFile} from 'node:fs/promises';import {webcrypto} from 'node:crypto';
+const root='https://syosetu.com',canonical=root+'/usernovelmanage/updateinput/ncode/1/',alias=root+'/draftnovelmanage/updateinput/ncode/1/',reception=root+'/usernovelmanage/receptionsupdateinput/ncode/1/';
+const source=await readFile(new URL('../sites/narou/bulk.js',import.meta.url),'utf8');
+const ctx=vm.createContext({URL,root});vm.runInContext(source.slice(source.indexOf('  function settingUrls('),source.indexOf('  function preview()'))+';globalThis.choose=settingUrls;',ctx);
+test('通常設定の別名だけをまとめ、受付・別クエリ・外部サイト・別作品を混同しない',()=>{
+ const urls=[alias,canonical,reception,canonical,alias+'?filter=draft',root+'/usernovelmanage/updateinput/ncode/2/','https://evil.test/usernovelmanage/updateinput/ncode/1/'];
+ assert.deepEqual(Array.from(ctx.choose(urls.map(url=>({url})),'1')),[canonical,reception,alias+'?filter=draft']);
+ assert.deepEqual(Array.from(ctx.choose([{url:alias}],'1')),[alias]);
+});
+async function fixture({aliasOnly=false,broken=false,httpError=false}={}){
+ let cp;const requests=[],saved=[];const work=root+'/usernovelmanage/top/ncode/1/',episode=root+'/usernoveldatamanage/updateinput/ncode/1/noveldataid/2/';
+ const doc=url=>({url,querySelector:s=>s==='.l-container'?{}:null,querySelectorAll:()=>[]});
+ const parser={ownerId:()=> '123',safeUrl:(u,b)=>new URL(u,b||root).href,pages:()=>[],main:d=>d.url.includes('/usernovel/list/')?'全1件中':'全0件中',list:d=>d.url?.includes('/usernovel/list/')?[{id:'1',title:'架空作品',url:work,publication:'投稿済み'}]:[],metadata:()=>[],links:d=>d.url===work?[{text:'投稿済1',url:work},{text:'下書き0',url:work+'?filter=draft'},...(!aliasOnly?[{text:'設定',url:canonical}]:[]),{text:'編集',url:alias},{text:'受付',url:reception},{text:'本文',url:episode}]:[],form:d=>d.url===episode?[{name:'novel',label:'本文',value:'\n本文😀\n\n'},{name:'freememo',label:'メモ',value:'  記録\n'}]:d.url.includes('novelinitialsetting')?[{name:'preface1',label:'テンプレート',value:''}]:[{name:broken&&d.url===canonical?'unexpected':d.url===reception?'notkansou':'title',label:'設定',value:'値'}],formFields:cs=>cs.map(c=>({label:c.label,value:c.value}))};
+ const context=vm.createContext({NarouParser:parser,document:{},location:{href:root+'/user/top/',pathname:'/user/top/'},crypto:webcrypto,URL,AbortController,Date,Math,setTimeout:(f,ms)=>{if(ms<30000)f();return 1;},clearTimeout(){},fetch:async url=>{requests.push(url);return {ok:!(httpError&&url===canonical),status:httpError&&url===canonical?503:200,url,text:async()=>url};},DOMParser:class{parseFromString(url){return doc(url);}},chrome:{runtime:{sendMessage:async m=>{if(m.type==='checkpoint')cp=structuredClone(m.report);if(m.type==='saveSnapshot')saved.push(structuredClone(m.snapshot));return {ok:true,checkpoint:cp};}}}});
+ vm.runInContext(source,context);await context.narouBulkBackup.start({works:true,allWorks:true,includeBody:true,includeSettings:true,quiet:true,maxPages:100});
+ for(let i=0;i<100;i++){await new Promise(r=>setImmediate(r));if(!context.narouBulkBackup.getStatus().running)return {cp,requests,saved};}throw Error('timeout');
+}
+test('通常設定1回と受付設定を保存し、本文の空白・メモを変えず完了する',async()=>{const f=await fixture();assert.equal(f.cp.complete,true);assert.equal(f.requests.filter(u=>u===canonical).length,1);assert.equal(f.requests.includes(alias),false);assert.equal(f.requests.includes(reception),true);assert.equal(f.saved.filter(r=>r.category==='作品設定').length,2);assert.equal(f.saved.find(r=>r.category==='エピソード').fields[0].value,'\n本文😀\n\n');});
+test('未投稿用の別名リンクしかない場合は取得経路を失わない',async()=>{const f=await fixture({aliasOnly:true});assert.equal(f.cp.complete,true);assert.equal(f.requests.includes(alias),true);assert.equal(f.requests.includes(canonical),false);});
+test('タイトル欄が消えた設定画面を正常保存・完了扱いにしない',async()=>{const f=await fixture({broken:true});assert.equal(f.cp.complete,false);assert.equal(f.saved.some(r=>r.category==='作品設定'&&r.url===canonical),false);assert.ok(f.cp.failures.some(x=>x.error.includes('入力欄')));});
+test('HTTPエラーを別名URLへの成功扱いで隠さず、未完了で止める',async()=>{const f=await fixture({httpError:true});assert.equal(f.cp.complete,false);assert.equal(f.requests.includes(alias),false);assert.equal(f.saved.some(r=>r.category==='エピソード'),false);assert.ok(f.cp.failures.some(x=>x.error.includes('HTTP 503')));});
